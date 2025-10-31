@@ -6,6 +6,7 @@
  */
 
 import type { OpenAIResponseMetadata } from "../types";
+import { baseURL } from "@/baseUrl";
 
 /**
  * Create a response that prompts the user to authenticate
@@ -46,7 +47,7 @@ export function createLoginPromptResponse(featureName?: string) {
  * Create a response prompting the user to subscribe
  *
  * @param featureName - Optional name of the feature requiring subscription
- * @returns MCP tool response with pricing widget reference
+ * @returns MCP tool response with subscription-required widget reference
  */
 export function createSubscriptionRequiredResponse(featureName?: string) {
   const baseMessage = featureName
@@ -56,7 +57,7 @@ export function createSubscriptionRequiredResponse(featureName?: string) {
   const responseMeta: OpenAIResponseMetadata = {
     "openai/toolInvocation/invoking": "Checking subscription",
     "openai/toolInvocation/invoked": "Subscription required",
-    "openai/outputTemplate": "ui://widget/pricing.html",
+    "openai/outputTemplate": "ui://widget/subscription-required.html",
     "openai/widgetAccessible": false,
     "openai/resultCanProduceWidget": true,
   };
@@ -68,8 +69,12 @@ export function createSubscriptionRequiredResponse(featureName?: string) {
         text: baseMessage,
       } as { [x: string]: unknown; type: "text"; text: string },
     ],
-    // Don't include structuredContent - would conflict with tool's outputSchema validation
-    // Widget will handle displaying plans
+    // Include structured content so widget can access feature name and pricing URL
+    structuredContent: {
+      featureName: featureName || "this feature",
+      error_message: "Subscription required",
+      pricingUrl: `${baseURL}/pricing`,
+    },
     isError: false,
     _meta: responseMeta,
   };

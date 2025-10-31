@@ -1,0 +1,304 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+// Define subscription plans based on your auth config
+const PLANS = [
+  {
+    name: "Basic",
+    planId: "basic",
+    price: "$9.99",
+    priceMonthly: 9.99,
+    interval: "month",
+    description: "Perfect for getting started with financial tracking",
+    features: [
+      "Up to 3 bank accounts",
+      "Transaction history",
+      "Spending insights",
+      "Account balance tracking",
+      "Email support",
+    ],
+    cta: "Get Started",
+    popular: false,
+    trial: false,
+  },
+  {
+    name: "Pro",
+    planId: "pro",
+    price: "$19.99",
+    priceMonthly: 19.99,
+    interval: "month",
+    description: "Advanced features for serious money management",
+    features: [
+      "Up to 10 bank accounts",
+      "All Basic features",
+      "Account health monitoring",
+      "Advanced spending analytics",
+      "14-day free trial",
+      "Priority support",
+    ],
+    cta: "Start Free Trial",
+    popular: true,
+    trial: true,
+  },
+  {
+    name: "Enterprise",
+    planId: "enterprise",
+    price: "$49.99",
+    priceMonthly: 49.99,
+    interval: "month",
+    description: "Everything you need for complete financial control",
+    features: [
+      "Unlimited bank accounts",
+      "All Pro features",
+      "Custom reporting",
+      "API access",
+      "Dedicated support",
+      "Custom integrations",
+    ],
+    cta: "Get Started",
+    popular: false,
+    trial: false,
+  },
+] as const;
+
+export default function PricingPage() {
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [currentSubscription, setCurrentSubscription] = useState<any>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
+
+  // Fetch current subscription status
+  useEffect(() => {
+    async function fetchSubscription() {
+      try {
+        const response = await fetch("/api/auth/subscription/list", {
+          credentials: "include",
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // data should be an array of subscriptions
+          if (Array.isArray(data) && data.length > 0) {
+            setCurrentSubscription(data[0]); // Get the first active subscription
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch subscription:", err);
+      } finally {
+        setLoadingSubscription(false);
+      }
+    }
+
+    fetchSubscription();
+  }, []);
+
+  const handleSubscribe = async (planId: string) => {
+    setIsLoading(planId);
+    setError(null);
+
+    try {
+      // Get current origin for success/cancel URLs
+      const baseUrl = window.location.origin;
+
+      // Prepare request body
+      const requestBody: any = {
+        plan: planId,
+        successUrl: `${baseUrl}/pricing/success`,
+        cancelUrl: `${baseUrl}/pricing`,
+      };
+
+      // If user has an existing subscription, include the subscription ID for upgrade
+      if (currentSubscription?.stripeSubscriptionId) {
+        requestBody.subscriptionId = currentSubscription.stripeSubscriptionId;
+      }
+
+      // Call Better Auth's subscription upgrade endpoint
+      const response = await fetch("/api/auth/subscription/upgrade", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include", // Important: include session cookie
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || "Failed to create checkout session");
+      }
+
+      const data = await response.json();
+
+      // Redirect to Stripe Checkout
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("No checkout URL returned");
+      }
+    } catch (err) {
+      console.error("Subscription error:", err);
+      setError(err instanceof Error ? err.message : "Failed to start subscription");
+      setIsLoading(null);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-4xl sm:text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+            Choose Your Plan
+          </h1>
+          <p className="text-xl text-gray-300 max-w-2xl mx-auto">
+            Get started with AskMyMoney and take control of your finances with AI-powered insights
+          </p>
+        </div>
+
+        {/* Current Subscription Status */}
+        {!loadingSubscription && currentSubscription && (
+          <div className="mb-8 max-w-2xl mx-auto bg-blue-500/10 border border-blue-500/50 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-blue-400 font-semibold">
+                  Current Plan: {currentSubscription.plan ? currentSubscription.plan.charAt(0).toUpperCase() + currentSubscription.plan.slice(1) : 'Unknown'}
+                </p>
+                <p className="text-gray-400 text-sm">
+                  Status: {currentSubscription.status === 'active' ? '✓ Active' : currentSubscription.status}
+                  {currentSubscription.cancelAtPeriodEnd && ' (Cancels at period end)'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-8 max-w-2xl mx-auto bg-red-500/10 border border-red-500/50 rounded-lg p-4">
+            <p className="text-red-400 text-center">{error}</p>
+          </div>
+        )}
+
+        {/* Pricing Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+          {PLANS.map((plan) => (
+            <div
+              key={plan.planId}
+              className={`relative rounded-2xl p-8 ${
+                plan.popular
+                  ? "bg-gradient-to-br from-blue-600/20 to-purple-600/20 border-2 border-blue-500"
+                  : "bg-gray-800/50 border border-gray-700"
+              } backdrop-blur-sm transition-transform hover:scale-105`}
+            >
+              {/* Popular Badge */}
+              {plan.popular && (
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                  <span className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-4 py-1 rounded-full text-sm font-semibold">
+                    Most Popular
+                  </span>
+                </div>
+              )}
+
+              {/* Plan Header */}
+              <div className="text-center mb-6">
+                <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
+                <p className="text-gray-400 text-sm mb-4">{plan.description}</p>
+                <div className="mb-2">
+                  <span className="text-4xl font-bold">{plan.price}</span>
+                  <span className="text-gray-400">/{plan.interval}</span>
+                </div>
+                {plan.trial && (
+                  <p className="text-sm text-blue-400">14-day free trial included</p>
+                )}
+              </div>
+
+              {/* Features List */}
+              <ul className="space-y-3 mb-8">
+                {plan.features.map((feature, index) => (
+                  <li key={index} className="flex items-start">
+                    <svg
+                      className="w-5 h-5 text-green-400 mr-3 mt-0.5 flex-shrink-0"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                    <span className="text-gray-300 text-sm">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* CTA Button */}
+              <button
+                onClick={() => handleSubscribe(plan.planId)}
+                disabled={isLoading !== null || (currentSubscription?.plan === plan.planId && currentSubscription?.status === 'active')}
+                className={`w-full py-3 px-6 rounded-lg font-semibold transition-all ${
+                  currentSubscription?.plan === plan.planId && currentSubscription?.status === 'active'
+                    ? "bg-green-600 cursor-default"
+                    : plan.popular
+                    ? "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
+                    : "bg-gray-700 hover:bg-gray-600"
+                } ${
+                  isLoading === plan.planId
+                    ? "opacity-50 cursor-not-allowed"
+                    : ""
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {currentSubscription?.plan === plan.planId && currentSubscription?.status === 'active' ? (
+                  "Current Plan ✓"
+                ) : isLoading === plan.planId ? (
+                  <span className="flex items-center justify-center">
+                    <svg
+                      className="animate-spin h-5 w-5 mr-2"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Processing...
+                  </span>
+                ) : (
+                  plan.cta
+                )}
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* FAQ or Additional Info */}
+        <div className="text-center text-gray-400 text-sm">
+          <p className="mb-2">
+            All plans include secure bank connections via Plaid and 256-bit encryption
+          </p>
+          <p>
+            Have questions?{" "}
+            <a href="mailto:support@askmymoney.ai" className="text-blue-400 hover:text-blue-300">
+              Contact our support team
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -333,21 +333,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
         // Check 2: Active Subscription
         const hasSubscription = await hasActiveSubscription(session.userId);
         if (!hasSubscription) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "To access account health check, please subscribe to a plan.",
-              },
-            ],
-            structuredContent: {
-              overall_health: 'error',
-              error_message: 'Subscription required'
-            },
-            _meta: {
-              "openai/outputTemplate": "ui://widget/account-health.html",
-            },
-          };
+          return createSubscriptionRequiredResponse("account health check");
         }
 
         // Check 3: Plaid Connection
@@ -439,6 +425,131 @@ const handler = withMcpAuth(auth, async (req, session) => {
             message: "Hello from the test widget!",
           },
         };
+      }
+    );
+
+    // ============================================================================
+    // SUBSCRIPTION CHECKOUT
+    // ============================================================================
+    server.registerTool(
+      "create_checkout_session",
+      {
+        title: "Create Subscription Checkout",
+        description: "Create a Stripe checkout session for subscription. Can be called from widgets.",
+        inputSchema: {
+          plan: z.enum(['basic', 'pro', 'enterprise']).describe("The subscription plan to purchase"),
+        },
+        _meta: {
+          "openai/widgetAccessible": true,  // Allow widgets to call this tool
+        },
+        securitySchemes: [{ type: "oauth2" }],
+      } as any,
+      async (args: any, context) => {
+        try {
+          if (!session) {
+            return {
+              content: [{ type: "text", text: "Authentication required" }],
+              isError: true,
+            };
+          }
+
+          const plan = args.plan as string;
+
+          // Get Stripe client and create checkout session directly
+          const Stripe = (await import('stripe')).default;
+          const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+            apiVersion: "2025-09-30.clover",
+          });
+
+          // Get user's Stripe customer ID
+          const pool = auth.options.database as any;
+          const client = await pool.connect();
+
+          try {
+            // Get or create Stripe customer
+            const userResult = await client.query(
+              'SELECT "stripeCustomerId" FROM "user" WHERE id = $1',
+              [session.userId]
+            );
+
+            let customerId = userResult.rows[0]?.stripeCustomerId;
+
+            if (!customerId) {
+              // Get user email
+              const emailResult = await client.query(
+                'SELECT email FROM "user" WHERE id = $1',
+                [session.userId]
+              );
+              const userEmail = emailResult.rows[0]?.email;
+
+              // Create customer if doesn't exist
+              const customer = await stripeClient.customers.create({
+                email: userEmail,
+                metadata: { userId: session.userId },
+              });
+              customerId = customer.id;
+
+              // Update user with customer ID
+              await client.query(
+                'UPDATE "user" SET "stripeCustomerId" = $1 WHERE id = $2',
+                [customerId, session.userId]
+              );
+            }
+
+            // Get price ID from env
+            const priceId = plan === 'basic'
+              ? process.env.STRIPE_BASIC_PRICE_ID
+              : plan === 'pro'
+              ? process.env.STRIPE_PRO_PRICE_ID
+              : process.env.STRIPE_ENTERPRISE_PRICE_ID;
+
+            if (!priceId) {
+              throw new Error(`Price ID not configured for plan: ${plan}`);
+            }
+
+            const baseUrl = process.env.BETTER_AUTH_URL || 'https://dev.askmymoney.ai';
+
+            // Create Stripe Checkout Session
+            const checkoutSession = await stripeClient.checkout.sessions.create({
+              customer: customerId,
+              mode: 'subscription',
+              payment_method_types: ['card'],
+              line_items: [{
+                price: priceId,
+                quantity: 1,
+              }],
+              success_url: `${baseUrl}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
+              cancel_url: `${baseUrl}/pricing`,
+              client_reference_id: session.userId,
+              metadata: {
+                userId: session.userId,
+                plan,
+              },
+            });
+
+            return {
+              content: [{
+                type: "text",
+                text: `Checkout session created for ${plan} plan`,
+              }],
+              structuredContent: {
+                checkoutUrl: checkoutSession.url,
+                plan,
+              },
+            };
+          } finally {
+            client.release();
+          }
+        } catch (error) {
+          console.error('[Tool] create_checkout_session error', { error });
+          return {
+            content: [{
+              type: "text",
+              text: error instanceof Error ? error.message : "Failed to create checkout session",
+            }],
+            isError: true,
+          };
+        }
       }
     );
 
@@ -819,7 +930,8 @@ const handler = withMcpAuth(auth, async (req, session) => {
   registerWidget("transactions.html", "Transactions Widget");
   registerWidget("spending-insights.html", "Spending Insights Widget");
   registerWidget("account-health.html", "Account Health Widget");
-  registerWidget("pricing.html", "Pricing Widget");
+  registerWidget("subscription-required.html", "Subscription Required Widget");
+  registerWidget("pricing.html", "Pricing Widget (Legacy)");
 })(req);
 });
 
