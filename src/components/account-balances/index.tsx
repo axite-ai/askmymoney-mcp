@@ -2,8 +2,20 @@
 
 import React from "react";
 import { useWidgetProps } from "@/app/hooks/use-widget-props";
+import { LocaleFormatter } from "@/lib/utils/locale-formatter";
+import type { OpenAIMetadata } from "@/lib/types";
 
-const PLANS = [
+type PricingPlan = {
+  id: string;
+  name: string;
+  price: string;
+  interval: string;
+  features: string[];
+  popular?: boolean;
+  trial?: string;
+};
+
+const PLANS: ReadonlyArray<PricingPlan> = [
   {
     id: 'basic',
     name: 'Basic',
@@ -29,14 +41,20 @@ const PLANS = [
   }
 ];
 
-function formatCurrency(amount: number, currency = 'USD') {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency
-  }).format(amount);
-}
+type SubscriptionPromptData = {
+  featureName?: string;
+};
 
-function InteractivePricing({ toolOutput }: { toolOutput: any }) {
+type CheckoutSessionEnvelope = {
+  result: string;
+};
+
+type CheckoutSessionPayload = {
+  error?: string;
+  checkoutUrl?: string;
+};
+
+function InteractivePricing({ toolOutput }: { toolOutput: SubscriptionPromptData }) {
   const [selectedPlan, setSelectedPlan] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -55,11 +73,11 @@ function InteractivePricing({ toolOutput }: { toolOutput: any }) {
     setError(null);
 
     try {
-      const result = await window.openai.callTool('create_checkout_session', {
+      const result = (await window.openai.callTool('create_checkout_session', {
         plan: selectedPlan
-      });
+      })) as CheckoutSessionEnvelope;
 
-      const parsedResult = JSON.parse(result.result);
+      const parsedResult = JSON.parse(result.result) as CheckoutSessionPayload;
 
       if (parsedResult.error) {
         throw new Error(parsedResult.error || 'Failed to create checkout session');
@@ -72,9 +90,13 @@ function InteractivePricing({ toolOutput }: { toolOutput: any }) {
       } else {
         throw new Error('No checkout URL returned');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Subscription error:', error);
-      setError(error.message || 'Failed to start subscription. Please try again.');
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to start subscription. Please try again.';
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -99,7 +121,7 @@ function InteractivePricing({ toolOutput }: { toolOutput: any }) {
       )}
 
       <div style={{ marginBottom: '12px' }}>
-        {PLANS.map(plan => (
+        {PLANS.map((plan) => (
           <div
             key={plan.id}
             className={`plan-card ${selectedPlan === plan.id ? 'selected' : ''}`}
@@ -158,45 +180,90 @@ function InteractivePricing({ toolOutput }: { toolOutput: any }) {
   );
 }
 
+interface AccountBalancesAmount {
+  current: number | null | undefined;
+  available: number | null | undefined;
+  iso_currency_code?: string | null;
+}
+
+interface AccountBalancesAccount {
+  account_id: string;
+  name: string;
+  type: string;
+  mask?: string | null;
+  balances: AccountBalancesAmount;
+}
+
+type AccountBalancesToolOutput = SubscriptionPromptData &
+  Record<string, unknown> & {
+    accounts?: AccountBalancesAccount[];
+    error_message?: string;
+    metadata?: OpenAIMetadata;
+  };
+
 export default function AccountBalances() {
-  const toolOutput = useWidgetProps();
+  const toolOutput = useWidgetProps<AccountBalancesToolOutput>();
+  const formatter = React.useMemo(
+    () => new LocaleFormatter(toolOutput?.metadata),
+    [toolOutput?.metadata]
+  );
 
-  if (!toolOutput) {
-    return <p>No accounts available</p>;
-  }
-
-  if (toolOutput.error_message === 'Subscription required' || toolOutput.featureName) {
+  if (toolOutput?.error_message === 'Subscription required' || toolOutput?.featureName) {
     return <InteractivePricing toolOutput={toolOutput} />;
   }
 
-  if (!toolOutput.accounts) {
+  const rawAccounts = toolOutput?.accounts;
+
+  if (!Array.isArray(rawAccounts)) {
     return <p>No accounts available</p>;
   }
 
-  const accounts = toolOutput.accounts || [];
+  const accounts = rawAccounts.filter(
+    (account): account is AccountBalancesAccount =>
+      Boolean(account) &&
+      typeof account.account_id === 'string' &&
+      typeof account.name === 'string' &&
+      typeof account.type === 'string' &&
+      typeof account.balances === 'object' &&
+      account.balances !== null
+  );
+
+  if (accounts.length === 0) {
+    return <p>No accounts available</p>;
+  }
 
   return (
     <div className="account-list">
-      {Array.isArray(accounts) && accounts.map((account: any) => (
-        <div key={account.account_id} className="account">
-          <div className="account-name">{account.name}</div>
-          <div className="account-type">{account.type} • {account.mask ? `****${account.mask}` : ''}</div>
-          <div className="balances">
-            {account.balances.current !== null ? (
-              <div className="balance-item">
-                <div className="balance-label">Current</div>
-                <div className="balance-amount">{formatCurrency(account.balances.current, account.balances.iso_currency_code)}</div>
-              </div>
-            ) : ''}
-            {account.balances.available !== null ? (
-              <div className="balance-item">
-                <div className="balance-label">Available</div>
-                <div className="balance-amount">{formatCurrency(account.balances.available, account.balances.iso_currency_code)}</div>
-              </div>
-            ) : ''}
+      {accounts.map((account) => {
+        const { current, available, iso_currency_code } = account.balances;
+        const currency = iso_currency_code ?? 'USD';
+        const maskSuffix = account.mask ? ` ••••${account.mask}` : '';
+
+        return (
+          <div key={account.account_id} className="account">
+            <div className="account-name">{account.name}</div>
+            <div className="account-type">{account.type}{maskSuffix}</div>
+            <div className="balances">
+              {current != null && (
+                <div className="balance-item">
+                  <div className="balance-label">Current</div>
+                  <div className="balance-amount">
+                    {formatter.formatCurrency(current, currency)}
+                  </div>
+                </div>
+              )}
+              {available != null && (
+                <div className="balance-item">
+                  <div className="balance-label">Available</div>
+                  <div className="balance-amount">
+                    {formatter.formatCurrency(available, currency)}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

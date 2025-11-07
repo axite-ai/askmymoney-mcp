@@ -3,7 +3,17 @@
 import React from "react";
 import { useWidgetProps } from "@/app/hooks/use-widget-props";
 
-const PLANS = [
+type PricingPlan = {
+  id: string;
+  name: string;
+  price: string;
+  interval: string;
+  features: string[];
+  popular?: boolean;
+  trial?: string;
+};
+
+const PLANS: ReadonlyArray<PricingPlan> = [
   {
     id: 'basic',
     name: 'Basic',
@@ -29,7 +39,11 @@ const PLANS = [
   }
 ];
 
-function InteractivePricing({ toolOutput }: { toolOutput: any }) {
+type SubscriptionPromptData = {
+  featureName?: string;
+};
+
+function InteractivePricing({ toolOutput }: { toolOutput: SubscriptionPromptData }) {
   const [selectedPlan, setSelectedPlan] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -48,11 +62,14 @@ function InteractivePricing({ toolOutput }: { toolOutput: any }) {
     setError(null);
 
     try {
-      const result = await window.openai.callTool('create_checkout_session', {
+      const result = (await window.openai.callTool('create_checkout_session', {
         plan: selectedPlan
-      });
+      })) as { result: string };
 
-      const parsedResult = JSON.parse(result.result);
+      const parsedResult = JSON.parse(result.result) as {
+        error?: string;
+        checkoutUrl?: string;
+      };
 
       if (parsedResult.error) {
         throw new Error(parsedResult.error || 'Failed to create checkout session');
@@ -65,9 +82,13 @@ function InteractivePricing({ toolOutput }: { toolOutput: any }) {
       } else {
         throw new Error('No checkout URL returned');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Subscription error:', error);
-      setError(error.message || 'Failed to start subscription. Please try again.');
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to start subscription. Please try again.';
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -92,7 +113,7 @@ function InteractivePricing({ toolOutput }: { toolOutput: any }) {
       )}
 
       <div style={{ marginBottom: '12px' }}>
-        {PLANS.map(plan => (
+        {PLANS.map((plan) => (
           <div
             key={plan.id}
             className={`plan-card ${selectedPlan === plan.id ? 'selected' : ''}`}
@@ -151,40 +172,73 @@ function InteractivePricing({ toolOutput }: { toolOutput: any }) {
   );
 }
 
+interface AccountHealthAccount {
+  account_id: string;
+  name: string;
+  warnings?: string[];
+}
+
+type AccountHealthToolOutput = SubscriptionPromptData &
+  Record<string, unknown> & {
+    accounts?: AccountHealthAccount[];
+    overallStatus?: string;
+    error_message?: string;
+  };
+
 export default function AccountHealth() {
-  const toolOutput = useWidgetProps();
+  const toolOutput = useWidgetProps<AccountHealthToolOutput>();
 
-  if (!toolOutput) {
-    return <p>No health data available</p>;
-  }
-
-  if (toolOutput.error_message === 'Subscription required' || toolOutput.featureName) {
+  if (toolOutput?.error_message === 'Subscription required' || toolOutput?.featureName) {
     return <InteractivePricing toolOutput={toolOutput} />;
   }
 
-  if (!toolOutput.accounts) {
+  const rawAccounts = toolOutput?.accounts;
+
+  if (!Array.isArray(rawAccounts)) {
     return <p>No health data available</p>;
   }
 
-  const statusClass = toolOutput.overallStatus === 'healthy' ? 'status-good' : 'status-warning';
+  const accounts = rawAccounts.filter(
+    (account): account is AccountHealthAccount =>
+      Boolean(account) &&
+      typeof account.account_id === 'string' &&
+      typeof account.name === 'string'
+  );
+
+  if (accounts.length === 0) {
+    return <p>No health data available</p>;
+  }
+
+  const statusValue =
+    typeof toolOutput?.overallStatus === 'string'
+      ? toolOutput.overallStatus
+      : 'N/A';
+  const statusClass = statusValue === 'healthy' ? 'status-good' : 'status-warning';
+  const hasIssues = accounts.some(
+    (account) => Array.isArray(account.warnings) && account.warnings.length > 0
+  );
 
   return (
     <div>
       <div className="health-summary">
         <div className={`status ${statusClass}`}>
-          Overall Health: {(toolOutput.overallStatus || 'N/A').toString().toUpperCase()}
+          Overall Health: {statusValue.toUpperCase()}
         </div>
       </div>
-      {Array.isArray(toolOutput.accounts) && toolOutput.accounts.some((a: any) => a.warnings.length > 0) ? (
+      {hasIssues ? (
         <div className="issues">
-          {toolOutput.accounts.flatMap((a: any) => a.warnings.map((w: string) => (
-            <div key={`${a.account_id}-${w}`} className="issue">
-              <div className="issue-title">{a.name}</div>
-              <div>{w}</div>
-            </div>
-          )))}
+          {accounts.flatMap((account) =>
+            (account.warnings ?? []).map((warning) => (
+              <div key={`${account.account_id}-${warning}`} className="issue">
+                <div className="issue-title">{account.name}</div>
+                <div>{warning}</div>
+              </div>
+            ))
+          )}
         </div>
-      ) : <p>No issues detected</p>}
+      ) : (
+        <p>No issues detected</p>
+      )}
     </div>
   );
 }
