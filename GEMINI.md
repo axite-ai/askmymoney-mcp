@@ -1,6 +1,6 @@
 # Project Overview
 
-This is a Next.js application that integrates with the ChatGPT Apps SDK to provide financial analysis tools within the ChatGPT interface. The application uses the Model Context Protocol (MCP) to expose tools and render widgets in ChatGPT.
+This is a Next.js application that integrates with the ChatGPT Apps SDK to provide financial analysis tools within the ChatGPT interface. The application uses the Model Context Protocol (MCP) to expose tools and render widgets in ChatGPT. Review `llm_context/appssdk/APPS_SDK_DOCS.txt` for the official Apps SDK documentation and `llm_context/appssdk/APPS_SDK_EXAMPLES_REPO.txt` for a gallery of working examples; check `llm_context/betterauth/` for the Better Auth plugin docs and use the empty `llm_context/mcp/` folder for any future MCP references so you understand end-to-end behavior.
 
 ## Key Technologies
 

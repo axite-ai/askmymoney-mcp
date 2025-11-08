@@ -1,0 +1,1400 @@
+### Project Scaffolding and Dependencies (Shell)
+
+Source: https://developers.openai.com/apps-sdk/build/custom-ux
+
+This command sequence outlines the initial steps for scaffolding a component project. It includes navigating to the `app/web` directory, initializing a Node.js project with `npm init -y`, and installing core React and TypeScript development dependencies.
+
+```shell
+cd app/web
+npm init -y
+npm install react@^18 react-dom@^18
+npm install -D typescript esbuild
+
+```
+
+--------------------------------
+
+### Install Python SDK and FastAPI - OpenAI Apps SDK
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Installs the official Python SDK for OpenAI Apps, which is recommended for rapid prototyping. FastAPI is a common choice for the web framework.
+
+```shell
+pip install "modelcontextprotocol[fastapi]"
+```
+
+--------------------------------
+
+### Window OpenAI API Reference
+
+Source: https://developers.openai.com/apps-sdk/build/custom-ux
+
+Reference for the `window.openai` API, detailing its structure, available methods, and event types for interacting with ChatGPT and MCP servers.
+
+```APIDOC
+## `window.openai` API Reference
+
+### Description
+The `window.openai` object is the primary interface for frontend components to interact with the ChatGPT host environment and your MCP server. It allows for tool invocation, message sending, navigation, and state management.
+
+### Globals Interface
+
+`declare global {
+  interface Window {
+    openai: API & OpenAiGlobals;
+  }
+
+  interface WindowEventMap {
+    [SET_GLOBALS_EVENT_TYPE]: SetGlobalsEvent;
+  }
+}
+`
+
+### `OpenAiGlobals` Type
+
+This type defines the global state and information available from the host.
+
+`type OpenAiGlobals<
+  ToolInput extends UnknownObject = UnknownObject,
+  ToolOutput extends UnknownObject = UnknownObject,
+  ToolResponseMetadata extends UnknownObject = UnknownObject,
+  WidgetState extends UnknownObject = UnknownObject
+> = {
+  theme: Theme;
+  userAgent: UserAgent;
+  locale: string;
+
+  // layout
+  maxHeight: number;
+  displayMode: DisplayMode;
+  safeArea: SafeArea;
+
+  // state
+  toolInput: ToolInput;
+  toolOutput: ToolOutput | null;
+  toolResponseMetadata: ToolResponseMetadata | null;
+  widgetState: WidgetState | null;
+};
+`
+
+### `API` Interface
+
+This type defines the core functions available through the `window.openai` object.
+
+`type API<WidgetState extends UnknownObject> = {
+  /** Calls a tool on your MCP. Returns the full response. */
+  callTool: (
+    name: string,
+    args: Record<string, unknown>
+  ) => Promise<CallToolResponse>;
+
+  /** Triggers a followup turn in the ChatGPT conversation */
+  sendFollowUpMessage: (args: { prompt: string }) => Promise<void>;
+
+  /** Opens an external link, redirects web page or mobile app */
+  openExternal(payload: { href: string }): void;
+
+  /** For transitioning an app from inline to fullscreen or pip */
+  requestDisplayMode: (args: { mode: DisplayMode }) => Promise<{
+    /**
+     * The granted display mode. The host may reject the request.
+     * For mobile, PiP is always coerced to fullscreen.
+     */
+    mode: DisplayMode;
+  }>;
+
+  setWidgetState: (state: WidgetState) => Promise<void>;
+};
+`
+
+### Constants and Event Types
+
+`export const SET_GLOBALS_EVENT_TYPE = "openai:set_globals";
+
+export class SetGlobalsEvent extends CustomEvent<{
+  globals: Partial<OpenAiGlobals>;
+}> {
+  readonly type = SET_GLOBALS_EVENT_TYPE;
+}
+`
+
+### Type Definitions
+
+`export type CallTool = (
+  name: string,
+  args: Record<string, unknown>
+) => Promise<CallToolResponse>;
+
+export type DisplayMode = "pip" | "inline" | "fullscreen";
+
+export type Theme = "light" | "dark";
+
+export type SafeAreaInsets = {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+};
+
+export type SafeArea = {
+  insets: SafeAreaInsets;
+};
+
+export type DeviceType = "mobile" | "tablet" | "desktop" | "unknown";
+
+export type UserAgent = {
+  device: { type: DeviceType };
+  capabilities: {
+    hover: boolean;
+    touch: boolean;
+  };
+};
+`
+
+### Method
+GET
+
+### Endpoint
+N/A (This is a reference to a JavaScript API within the browser context)
+
+### Parameters
+None (Interface methods and global properties)
+
+### Request Body
+None
+
+### Request Example
+```javascript
+// Example of calling a tool
+window.openai.callTool("my_tool", { argument: "value" })
+  .then(response => console.log(response));
+
+// Example of sending a follow-up message
+window.openai.sendFollowUpMessage({ prompt: "What's next?" });
+
+// Example of requesting a display mode change
+window.openai.requestDisplayMode({ mode: "fullscreen" });
+
+// Example of setting widget state
+window.openai.setWidgetState({ some_state: "data" });
+```
+
+### Response
+
+#### Success Response
+Responses vary based on the method called. `callTool` returns a `CallToolResponse`. `requestDisplayMode` returns the granted `DisplayMode`. `setWidgetState` and `sendFollowUpMessage` return `Promise<void>`.
+
+#### Response Example
+```json
+// Example response from callTool
+{
+  // ... CallToolResponse structure ...
+}
+
+// Example response from requestDisplayMode
+{
+  "mode": "fullscreen"
+}
+```
+```
+
+--------------------------------
+
+### Sending Conversational Follow-ups with OpenAI SDK (TypeScript)
+
+Source: https://developers.openai.com/apps-sdk/build/custom-ux
+
+This snippet shows how to use `window.openai.sendFollowUpMessage` to insert a message into the conversation, simulating user input. The example constructs a prompt to draft a tasting itinerary for favorited pizzerias.
+
+```typescript
+await window.openai?.sendFollowUpMessage({
+  prompt: "Draft a tasting itinerary for the pizzerias I favorited.",
+});
+
+```
+
+--------------------------------
+
+### Install TypeScript SDK and Express - OpenAI Apps SDK
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Installs the official TypeScript SDK for OpenAI Apps, suitable for Node/React stacks. Express is a common web framework choice.
+
+```shell
+npm install @modelcontextprotocol/sdk express
+```
+
+--------------------------------
+
+### Requesting Alternate Layouts with OpenAI SDK (TypeScript)
+
+Source: https://developers.openai.com/apps-sdk/build/custom-ux
+
+This example demonstrates requesting different display modes (inline, PiP, fullscreen) from the host environment using `window.openai.requestDisplayMode`. It shows how to request a `fullscreen` mode, noting that on mobile, PiP might be coerced to fullscreen.
+
+```typescript
+await window.openai?.requestDisplayMode({ mode: "fullscreen" });
+// Note: on mobile, PiP may be coerced to fullscreen
+
+```
+
+--------------------------------
+
+### React Router Setup for Host-Backed Navigation (TypeScript)
+
+Source: https://developers.openai.com/apps-sdk/build/custom-ux
+
+This code sets up routing for a component using React Router's `BrowserRouter`. It defines a basic route structure with a root path and a nested route for `place/:placeId`. This setup enables host-backed navigation, keeping the iframe's history in sync with ChatGPT's UI.
+
+```typescript
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+export default function PizzaListRouter() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<PizzaListApp />}>
+          <Route path="place/:placeId" element={<PizzaListApp />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+```
+
+--------------------------------
+
+### Registering a Tool with Client-Provided _meta Information
+
+Source: https://developers.openai.com/apps-sdk/reference
+
+This example registers a tool called `recommend_cafe` and shows how to access client-provided `_meta` fields within the tool's execution logic. It retrieves `openai/locale` and `openai/userLocation` from the `_meta` object passed to the async function to personalize the cafe recommendation.
+
+```javascript
+server.registerTool(
+  "recommend_cafe",
+  {
+    title: "Recommend a cafe",
+    inputSchema: { type: "object" }
+  },
+  async (_args, { _meta }) => {
+    const locale = _meta?.["openai/locale"] ?? "en";
+    const location = _meta?.["openai/userLocation"]?.city;
+
+    return {
+      content: [{ type: "text", text: formatIntro(locale, location) }],
+      structuredContent: await findNearbyCafes(location)
+    };
+  }
+);
+```
+
+--------------------------------
+
+### Registering a Component Resource with _meta Fields
+
+Source: https://developers.openai.com/apps-sdk/reference
+
+This example demonstrates how to register an HTML component resource using `server.registerResource`. It highlights the use of `_meta` fields to provide a description, border preference, CSP settings, and a custom domain for the component, which are used by ChatGPT for rendering and security.
+
+```javascript
+server.registerResource("html", "ui://widget/widget.html", {}, async () => ({
+  contents: [
+    {
+      uri: "ui://widget/widget.html",
+      mimeType: "text/html",
+      text: componentHtml,
+      _meta: {
+        "openai/widgetDescription": "Renders an interactive UI showcasing the zoo animals returned by get_zoo_animals.",
+        "openai/widgetPrefersBorder": true,
+        "openai/widgetCSP": {
+          connect_domains: [],
+          resource_domains: ["https://persistent.oaistatic.com"],
+        },
+        "openai/widgetDomain": "https://chatgpt.com",
+      },
+    },
+  ],
+}));
+```
+
+--------------------------------
+
+### Package.json: Build React Component with esbuild
+
+Source: https://developers.openai.com/apps-sdk/build/custom-ux
+
+This `package.json` script demonstrates how to use esbuild to bundle a React component into a single, inlinable JavaScript module. It specifies the input file (`src/component.tsx`), bundles it into an ESM format, and outputs it to `dist/component.js`. Ensure `npm install` has been run in the web directory.
+
+```json
+{
+  "scripts": {
+    "build": "esbuild src/component.tsx --bundle --format=esm --outfile=dist/component.js"
+  }
+}
+
+```
+
+--------------------------------
+
+### Programmatic Navigation with React Router (TypeScript)
+
+Source: https://developers.openai.com/apps-sdk/build/custom-ux
+
+This example shows how to perform programmatic navigation within a React component using `useNavigate` from React Router. It includes functions to open place details by navigating to `place/:placeId` and to close details by navigating back to the parent route.
+
+```typescript
+import { useNavigate } from "react-router-dom";
+
+const navigate = useNavigate();
+
+function openDetails(placeId: string) {
+  navigate(`place/${placeId}`, { replace: false });
+}
+
+function closeDetails() {
+  navigate("..", { replace: true });
+}
+
+```
+
+--------------------------------
+
+### Initialize Component State with Initial Render Data - JavaScript
+
+Source: https://developers.openai.com/apps-sdk/plan/components
+
+Demonstrates how to use `window.openai.toolOutput` to set the initial render data for a component. This is the starting point for component state when it first appears.
+
+```javascript
+const initialData = window.openai.toolOutput;
+// Use initialData to render the component's initial state.
+```
+
+--------------------------------
+
+### Triggering Server Actions with OpenAI SDK (TypeScript)
+
+Source: https://developers.openai.com/apps-sdk/build/custom-ux
+
+This example demonstrates how to trigger server-side actions (MCP tool calls) directly from a component using `window.openai.callTool`. It shows a function `refreshPlaces` that calls a tool named `refresh_pizza_list` with a `city` parameter. Tools should ideally be idempotent and return structured content for the model to reason over.
+
+```typescript
+async function refreshPlaces(city: string) {
+  await window.openai?.callTool("refresh_pizza_list", { city });
+}
+
+```
+
+--------------------------------
+
+### TypeScript: Define window.openai API Interface for ChatGPT Integration
+
+Source: https://developers.openai.com/apps-sdk/build/custom-ux
+
+This TypeScript code defines the global `window.openai` interface for web components interacting with ChatGPT. It outlines the structure for global properties like theme, locale, and layout, as well as methods for calling tools, sending follow-up messages, opening external links, requesting display mode changes, and setting widget state. It also defines event types and related data structures for managing global state synchronization.
+
+```typescript
+declare global {
+  interface Window {
+    openai: API & OpenAiGlobals;
+  }
+
+  interface WindowEventMap {
+    [SET_GLOBALS_EVENT_TYPE]: SetGlobalsEvent;
+  }
+}
+
+type OpenAiGlobals<
+  ToolInput extends UnknownObject = UnknownObject,
+  ToolOutput extends UnknownObject = UnknownObject,
+  ToolResponseMetadata extends UnknownObject = UnknownObject,
+  WidgetState extends UnknownObject = UnknownObject
+> = {
+  theme: Theme;
+  userAgent: UserAgent;
+  locale: string;
+
+  // layout
+  maxHeight: number;
+  displayMode: DisplayMode;
+  safeArea: SafeArea;
+
+  // state
+  toolInput: ToolInput;
+  toolOutput: ToolOutput | null;
+  toolResponseMetadata: ToolResponseMetadata | null;
+  widgetState: WidgetState | null;
+};
+
+type API<WidgetState extends UnknownObject> = {
+  /** Calls a tool on your MCP. Returns the full response. */
+  callTool: (
+    name: string,
+    args: Record<string, unknown>
+  ) => Promise<CallToolResponse>;
+
+  /** Triggers a followup turn in the ChatGPT conversation */
+  sendFollowUpMessage: (args: { prompt: string }) => Promise<void>;
+
+  /** Opens an external link, redirects web page or mobile app */
+  openExternal(payload: { href: string }): void;
+
+  /** For transitioning an app from inline to fullscreen or pip */
+  requestDisplayMode: (args: { mode: DisplayMode }) => Promise<{
+    /**
+     * The granted display mode. The host may reject the request.
+     * For mobile, PiP is always coerced to fullscreen.
+     */
+    mode: DisplayMode;
+  }>;
+
+  setWidgetState: (state: WidgetState) => Promise<void>;
+};
+
+// Dispatched when any global changes in the host page
+export const SET_GLOBALS_EVENT_TYPE = "openai:set_globals";
+export class SetGlobalsEvent extends CustomEvent<{
+  globals: Partial<OpenAiGlobals>;
+}> {
+  readonly type = SET_GLOBALS_EVENT_TYPE;
+}
+
+export type CallTool = (
+  name: string,
+  args: Record<string, unknown>
+) => Promise<CallToolResponse>;
+
+export type DisplayMode = "pip" | "inline" | "fullscreen";
+
+export type Theme = "light" | "dark";
+
+export type SafeAreaInsets = {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+};
+
+export type SafeArea = {
+  insets: SafeAreaInsets;
+};
+
+export type DeviceType = "mobile" | "tablet" | "desktop" | "unknown";
+
+export type UserAgent = {
+  device: { type: DeviceType };
+  capabilities: {
+    hover: boolean;
+    touch: boolean;
+  };
+};
+
+```
+
+--------------------------------
+
+### React: Manage Widget State with useWidgetState Hook
+
+Source: https://developers.openai.com/apps-sdk/build/custom-ux
+
+This hook synchronizes local React state with host-persisted widget state. It leverages `useState` and `useEffect` to read initial state from `useWebplusGlobal` and updates it using `window.openai.setWidgetState`. It handles both initial default states and updates, ensuring persistence back to ChatGPT.
+
+```javascript
+export function useWidgetState<T extends WidgetState>(
+  defaultState: T | (() => T)
+): readonly [T, (state: SetStateAction<T>) => void];
+export function useWidgetState<T extends WidgetState>(
+  defaultState?: T | (() => T | null) | null
+): readonly [T | null, (state: SetStateAction<T | null>) => void];
+export function useWidgetState<T extends WidgetState>(
+  defaultState?: T | (() => T | null) | null
+): readonly [T | null, (state: SetStateAction<T | null>) => void] {
+  const widgetStateFromWindow = useWebplusGlobal("widgetState") as T;
+
+  const [widgetState, _setWidgetState] = useState<T | null>(() => {
+    if (widgetStateFromWindow != null) {
+      return widgetStateFromWindow;
+    }
+
+    return typeof defaultState === "function"
+      ? defaultState()
+      : defaultState ?? null;
+  });
+
+  useEffect(() => {
+    _setWidgetState(widgetStateFromWindow);
+  }, [widgetStateFromWindow]);
+
+  const setWidgetState = useCallback(
+    (state: SetStateAction<T | null>) => {
+      _setWidgetState((prevState) => {
+        const newState = typeof state === "function" ? state(prevState) : state;
+
+        if (newState != null) {
+          window.openai.setWidgetState(newState);
+        }
+
+        return newState;
+      });
+    },
+    [window.openai.setWidgetState]
+  );
+
+  return [widgetState, setWidgetState] as const;
+}
+```
+
+--------------------------------
+
+### Python Token Verification with FastMCP
+
+Source: https://developers.openai.com/apps-sdk/build/auth
+
+Implements a custom token verifier using the FastMCP module from the Python SDK. It defines a MyVerifier class that extends TokenVerifier and overrides the verify_token method to validate JWTs. This example requires a JWT validation function and a jwks_url.
+
+```python
+from mcp.server.fastmcp import FastMCP
+from mcp.server.auth.settings import AuthSettings
+from mcp.server.auth.provider import TokenVerifier, AccessToken
+
+class MyVerifier(TokenVerifier):
+    async def verify_token(self, token: str) -> AccessToken | None:
+        payload = validate_jwt(token, jwks_url)
+        if "user" not in payload.get("permissions", []):
+            return None
+        return AccessToken(
+            token=token,
+            client_id=payload["azp"],
+            subject=payload["sub"],
+            scopes=payload.get("permissions", []),
+            claims=payload,
+        )
+
+mcp = FastMCP(
+    name="kanban-mcp",
+    stateless_http=True,
+    token_verifier=MyVerifier(),
+    auth=AuthSettings(
+        issuer_url="https://your-tenant.us.auth0.com",
+        resource_server_url="https://example.com/mcp",
+        required_scopes=["user"],
+    ),
+)
+```
+
+--------------------------------
+
+### React Hook for OpenAI Global State (TypeScript)
+
+Source: https://developers.openai.com/apps-sdk/build/custom-ux
+
+The `useOpenAiGlobal` hook allows React components to subscribe to changes in global OpenAI state. It listens for `openai:set_globals` events and provides a reactive way to access specific global values like `toolInput`, `toolOutput`, and `toolResponseMetadata`. This hook is essential for making apps responsive to dynamic changes within the OpenAI environment.
+
+```typescript
+import { useSyncExternalStore } from "react";
+
+const SET_GLOBALS_EVENT_TYPE = "openai:set_globals";
+
+type OpenAiGlobals = {
+  toolInput: any;
+  toolOutput: any;
+  toolResponseMetadata: any;
+};
+
+export function useOpenAiGlobal<K extends keyof OpenAiGlobals>(
+  key: K
+): OpenAiGlobals[K] {
+  return useSyncExternalStore(
+    (onChange) => {
+      const handleSetGlobal = (event: CustomEvent<{
+        globals: Partial<OpenAiGlobals>;
+      }>) => {
+        const value = event.detail.globals[key];
+        if (value === undefined) {
+          return;
+        }
+
+        onChange();
+      };
+
+      window.addEventListener(SET_GLOBALS_EVENT_TYPE, handleSetGlobal as EventListener, {
+        passive: true,
+      });
+
+      return () => {
+        window.removeEventListener(SET_GLOBALS_EVENT_TYPE, handleSetGlobal as EventListener);
+      };
+    },
+    () => window.openai[key]
+  );
+}
+
+export function useToolInput() {
+  return useOpenAiGlobal("toolInput");
+}
+
+export function useToolOutput() {
+  return useOpenAiGlobal("toolOutput");
+}
+
+export function useToolResponseMetadata() {
+  return useOpenAiGlobal("toolResponseMetadata");
+}
+
+```
+
+--------------------------------
+
+### Register Tool with OpenAI Metadata for SDK
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Registers a tool with metadata, including an output template and a widget description, for use with the OpenAI SDK. This helps the model understand how to present tool output, such as linking to a specific UI widget. The `_meta.openai/outputTemplate` field specifies the UI to use for rendering the output.
+
+```javascript
+server.registerTool(
+  "get_zoo_animals",
+  {
+    title: "get_zoo_animals",
+    description: "Lists zoo animals and facts about them",
+    inputSchema: { count: z.number().int().min(1).max(20).optional() },
+    annotations: {
+      readOnlyHint: true,
+    },
+    _meta: {
+      "openai/outputTemplate": "ui://widget/widget.html",
+    },
+  },
+  async ({ count = 10 }, _extra) => {
+    const animals = generateZooAnimals(count);
+    return {
+      content: [],
+      structuredContent: { animals },
+    };
+  }
+);
+```
+
+--------------------------------
+
+### Enable Component-Initiated Tool Access
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Demonstrates how to enable component-initiated tool access by marking a tool's metadata with `_meta.openai/widgetAccessible: true`. This configuration allows the component to trigger tool access, enhancing interactivity.
+
+```json
+"_meta": {
+  "openai/outputTemplate": "ui://widget/kanban-board.html",
+  "openai/widgetAccessible": true
+}
+
+```
+
+--------------------------------
+
+### Register Kanban Board Tool with MCP Server
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Registers a 'kanban-board' tool with the MCP server, defining its title, metadata (including output template and invocation details), and input schema. The tool's handler function calls `loadKanbanBoard` and returns structured content, free-form content, and metadata, optimizing the payload for the model and component.
+
+```javascript
+server.registerTool(
+  "kanban-board",
+  {
+    title: "Show Kanban Board",
+    _meta: {
+      "openai/outputTemplate": "ui://widget/kanban-board.html",
+      "openai/toolInvocation/invoking": "Displaying the board",
+      "openai/toolInvocation/invoked": "Displayed the board"
+    },
+    inputSchema: { tasks: z.string() }
+  },
+  async () => {
+    const board = await loadKanbanBoard();
+
+    return {
+      structuredContent: {
+        columns: board.columns.map((column) => ({
+          id: column.id,
+          title: column.title,
+          tasks: column.tasks.slice(0, 5) // keep payload concise for the model
+        }))
+      },
+      content: [{ type: "text", text: "Here's your latest board. Drag cards in the component to update status." }],
+      _meta: {
+        tasksById: board.tasksById, // full task map for the component only
+        lastSyncedAt: board.lastSyncedAt
+      }
+    };
+  }
+);
+
+```
+
+--------------------------------
+
+### Register Resource with Component Description for OpenAI SDK
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Registers an HTML resource with a component description for OpenAI, enabling models to understand the UI. This is useful for rich-UI clients to steer experiences without affecting backward compatibility. Ensure actions are reloaded in dev mode for the description to take effect.
+
+```javascript
+server.registerResource("html", "ui://widget/widget.html", {}, async () => ({
+  contents: [
+    {
+      uri: "ui://widget/widget.html",
+      mimeType: "text/html",
+      text: componentHtml,
+      _meta: {
+        "openai/widgetDescription": "Renders an interactive UI showcasing the zoo animals returned by get_zoo_animals.",
+      },
+    },
+  ],
+}));
+```
+
+--------------------------------
+
+### Register UI Template and Tool with Node.js SDK
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+This snippet demonstrates how to set up an MCP server, register an HTML UI resource with Skybridge mime type, and link a tool to this UI template using the Node.js SDK. It includes loading local JS/CSS assets and defining metadata for rendering preferences and security policies within the ChatGPT iframe.
+
+```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { readFileSync } from "node:fs";
+
+// Create an MCP server
+const server = new McpServer({
+  name: "kanban-server",
+  version: "1.0.0"
+});
+
+// Load locally built assets (produced by your component build)
+const KANBAN_JS = readFileSync("web/dist/kanban.js", "utf8");
+const KANBAN_CSS = (() => {
+  try {
+    return readFileSync("web/dist/kanban.css", "utf8");
+  } catch {
+    return ""; // CSS optional
+  }
+})();
+
+// UI resource (no inline data assignment; host will inject data)
+server.registerResource(
+  "kanban-widget",
+  "ui://widget/kanban-board.html",
+  {},
+  async () => ({
+    contents: [
+      {
+        uri: "ui://widget/kanban-board.html",
+        mimeType: "text/html+skybridge",
+        text: `
+<div id="kanban-root"></div>
+${KANBAN_CSS ? `<style>${KANBAN_CSS}</style>` : ""}
+<script type="module">${KANBAN_JS}</script>
+        `,
+        _meta: {
+          /* 
+            Renders the widget within a rounded border and shadow. 
+            Otherwise, the HTML is rendered full-bleed in the conversation
+          */
+          "openai/widgetPrefersBorder": true,
+          
+          /* 
+            Assigns a subdomain for the HTML. 
+            When set, the HTML is rendered within `chatgpt-com.web-sandbox.oaiusercontent.com`
+            It's also used to configure the base url for external links.
+          */
+          "openai/widgetDomain": 'https://chatgpt.com',
+
+          /*
+            Required to make external network requests from the HTML code. 
+            Also used to validate `openai.openExternal()` requests. 
+          */
+          'openai/widgetCSP': {
+              // Maps to `connect-src` rule in the iframe CSP
+              connect_domains: ['https://chatgpt.com'],
+              // Maps to style-src, style-src-elem, img-src, font-src, media-src etc. in the iframe CSP
+              resource_domains: ['https://*.oaistatic.com'],
+          }
+        }
+      },
+    ],
+  })
+);
+
+server.registerTool(
+  "kanban-board",
+  {
+    title: "Show Kanban Board",
+    _meta: {
+      // associate this tool with the HTML template
+      "openai/outputTemplate": "ui://widget/kanban-board.html",
+      // labels to display in ChatGPT when the tool is called
+      "openai/toolInvocation/invoking": "Displaying the board",
+      "openai/toolInvocation/invoked": "Displayed the board"
+    },
+    inputSchema: { tasks: z.string() }
+  },
+  async () => {
+    return {
+      content: [{ type: "text", text: "Displayed the kanban board!" }],
+      structuredContent: {}
+    };
+  }
+);
+
+```
+
+--------------------------------
+
+### OAuth 2.1 Flow in Practice
+
+Source: https://developers.openai.com/apps-sdk/build/auth
+
+Describes the step-by-step flow of how authentication and authorization occur between ChatGPT, your MCP server, and your authorization server.
+
+```APIDOC
+### Flow in practice
+
+  1. ChatGPT queries your MCP server for protected resource metadata. You can configure this with `AuthSettings` in the official Python SDK’s FastMCP module.
+  2. ChatGPT registers itself with your authorization server using the `registration_endpoint` and obtains a `client_id`.
+  3. When the user first invokes a tool, the ChatGPT client launches the OAuth authorization code + PKCE flow. The user authenticates and consents to the requested scopes.
+  4. ChatGPT exchanges the authorization code for an access token and attaches it to subsequent MCP requests (`Authorization: Bearer <token>`).
+  5. Your server verifies the token on each request (issuer, audience, expiration, scopes) before executing the tool.
+```
+
+--------------------------------
+
+### Configure Tool Call Status Strings in JSON
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Provides localized status strings for tool calls, enhancing user experience during and after invocation. The `_meta` object contains keys for different invocation states: `invoking` for the 'in progress' state and `invoked` for the 'completed' state. An `outputTemplate` key can also specify a template for rendering output.
+
+```json
+"_meta": {
+  "openai/outputTemplate": "ui://widget/kanban-board.html",
+  "openai/toolInvocation/invoking": "Organizing tasks…",
+  "openai/toolInvocation/invoked": "Board refreshed."
+}
+```
+
+--------------------------------
+
+### Configure Component Subdomain in JSON
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Sets a custom subdomain for rendering components, allowing for restricted access to specific origins or referrers, particularly useful for public API keys. By default, components render on `https://web-sandbox.oaiusercontent.com`. This configuration maps a custom domain like `chatgpt.com` to a unique subdomain within the sandbox.
+
+```json
+"openai/widgetDomain": "https://chatgpt.com"
+```
+
+--------------------------------
+
+### Initialize MCP with Locale Metadata in JSON
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Demonstrates the `initialize` method parameters for a Message Conversation Protocol (MCP) request, including the `_meta` object which contains the `openai/locale` key. This key specifies the user's preferred locale, enabling servers to serve localized content. Older clients might use `_meta["webplus/i18n"]` for backward compatibility.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {
+      "roots": { "listChanged": true },
+      "sampling": {},
+      "elicitation": {}
+    },
+    "_meta": {
+      "openai/locale": "en-GB"
+    },
+    "clientInfo": {
+      "name": "ChatGPT",
+      "title": "ChatGPT",
+      "version": "1.0.0"
+    }
+  }
+}
+
+```
+
+--------------------------------
+
+### Load Kanban Board Data
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Asynchronously fetches and structures task data for a Kanban board. It categorizes tasks into 'todo', 'in-progress', and 'done' states, and creates a map of tasks by their IDs. This function prepares data for display and component hydration, limiting the payload sent to the model.
+
+```javascript
+async function loadKanbanBoard() {
+  const tasks = [
+    { id: "task-1", title: "Design empty states", assignee: "Ada", status: "todo" },
+    { id: "task-2", title: "Wireframe admin panel", assignee: "Grace", status: "in-progress" },
+    { id: "task-3", title: "QA onboarding flow", assignee: "Lin", status: "done" }
+  ];
+
+  return {
+    columns: [
+      { id: "todo", title: "To do", tasks: tasks.filter((task) => task.status === "todo") },
+      { id: "in-progress", title: "In progress", tasks: tasks.filter((task) => task.status === "in-progress") },
+      { id: "done", title: "Done", tasks: tasks.filter((task) => task.status === "done") }
+    ],
+    tasksById: Object.fromEntries(tasks.map((task) => [task.id, task])),
+    lastSyncedAt: new Date().toISOString()
+  };
+}
+```
+
+--------------------------------
+
+### Registering a Tool with _meta for Output Templating
+
+Source: https://developers.openai.com/apps-sdk/reference
+
+This snippet shows how to register a tool named `get_zoo_animals` using `server.registerTool`. It includes `inputSchema` and utilizes the `_meta` field to specify an `openai/outputTemplate` pointing to a UI widget. The tool fetches zoo animals and returns structured content, plain text content, and internal `_meta` data.
+
+```javascript
+server.registerTool(
+  "get_zoo_animals",
+  {
+    title: "get_zoo_animals",
+    inputSchema: { count: z.number().int().min(1).max(20).optional() },
+    _meta: { "openai/outputTemplate": "ui://widget/widget.html" }
+  },
+  async ({ count = 10 }) => {
+    const animals = generateZooAnimals(count);
+
+    return {
+      structuredContent: { animals },
+      content: [{ type: "text", text: `Here are ${animals.length} animals.` }],
+      _meta: {
+        allAnimalsById: Object.fromEntries(animals.map((animal) => [animal.id, animal]))
+      }
+    };
+  }
+);
+```
+
+--------------------------------
+
+### Authentication Overview
+
+Source: https://developers.openai.com/apps-sdk/build/auth
+
+This section covers the general authentication needs for Apps SDK applications, highlighting when user authentication is necessary and the option to integrate custom authorization servers.
+
+```APIDOC
+## Authentication
+
+Authentication patterns for Apps SDK apps.
+
+## Authenticate your users
+
+Many Apps SDK apps can operate in a read-only, anonymous mode, but anything that exposes customer-specific data or write actions should authenticate users.
+You can integrate with your own authorization server when you need to connect to an existing backend or share data between users.
+```
+
+--------------------------------
+
+### Expose Local Server with ngrok - CLI
+
+Source: https://developers.openai.com/apps-sdk/deploy
+
+This command uses ngrok to create a secure tunnel from the internet to your local server running on port 2091. This is useful for local development and testing your MCP server with ChatGPT.
+
+```bash
+ngrok http 2091
+# https://<subdomain>.ngrok.app/mcp → http://127.0.0.1:2091/mcp
+```
+
+--------------------------------
+
+### Define Widget Content Security Policy (CSP) in JavaScript
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Registers an HTML resource for a widget, including a Content Security Policy (CSP) configuration within the `_meta` property. This CSP specifies allowed domains for connecting and loading resources, ensuring secure widget distribution within ChatGPT. The `openai/widgetCSP` meta property is crucial for this configuration.
+
+```javascript
+server.registerResource(
+  "html",
+  "ui://widget/widget.html",
+  {},
+  async (req) => ({
+    contents: [
+      {
+        uri: "ui://widget/widget.html",
+        mimeType: "text/html",
+        text: `
+<div id="kitchen-sink-root"></div>
+<link rel="stylesheet" href="https://persistent.oaistatic.com/ecosystem-built-assets/kitchen-sink-2d2b.css">
+<script type="module" src="https://persistent.oaistatic.com/ecosystem-built-assets/kitchen-sink-2d2b.js">
+        `,
+        _meta: {
+          "openai/widgetCSP": {
+            connect_domains: [],
+            resource_domains: ["https://persistent.oaistatic.com"],
+          }
+        },
+      },
+    ],
+  })
+);
+
+```
+
+--------------------------------
+
+### Tool Descriptor Parameters
+
+Source: https://developers.openai.com/apps-sdk/reference
+
+This section details the parameters and fields required for tool descriptors.
+
+```APIDOC
+## Tool descriptor parameters
+By default, a tool description should include the fields listed here.
+### `_meta` fields on tool descriptor
+We have also require the following `_meta` fields on the tool descriptor:
+Key| Placement| Type| Limits| Purpose  
+---|---|---|---|---
+`_meta["securitySchemes"]`| Tool descriptor| array| —| Back-compat mirror for clients that only read `_meta`.  
+`_meta["openai/outputTemplate"]`| Tool descriptor| string (URI)| —| Resource URI for component HTML template (`text/html+skybridge`).  
+`_meta["openai/widgetAccessible"]`| Tool descriptor| boolean| default `false`| Allow component→tool calls through the client bridge.  
+`_meta["openai/toolInvocation/invoking"]`| Tool descriptor| string| ≤ 64 chars| Short status text while the tool runs.  
+`_meta["openai/toolInvocation/invoked"]`| Tool descriptor| string| ≤ 64 chars| Short status text after the tool completes.  
+Example:
+```javascript
+server.registerTool(
+  "search",
+  {
+    title: "Public Search",
+    description: "Search public documents.",
+    inputSchema: {
+      type: "object",
+      properties: { q: { type: "string" } },
+      required: ["q"]
+    },
+    securitySchemes: [
+      { type: "noauth" },
+      { type: "oauth2", scopes: ["search.read"] }
+    ],
+    _meta: {
+      securitySchemes: [
+        { type: "noauth" },
+        { type: "oauth2", scopes: ["search.read"] }
+      ],
+      "openai/outputTemplate": "ui://widget/story.html",
+      "openai/toolInvocation/invoking": "Searching…",
+      "openai/toolInvocation/invoked": "Results ready"
+    }
+  },
+  async ({ q }) => performSearch(q)
+);
+
+```
+
+### Annotations
+To label a tool as “read-only”, please use the following annotation on the tool descriptor:
+Key| Type| Required| Notes  
+---|---|---|---
+`readOnlyHint`| boolean| Optional| Signal that the tool is read-only (helps model planning).  
+Example:
+```javascript
+server.registerTool(
+  "list_saved_recipes",
+  {
+    title: "List saved recipes",
+    description: "Returns the user’s saved recipes without modifying them.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true }
+  },
+  async () => fetchSavedRecipes()
+);
+
+```
+```
+
+--------------------------------
+
+### Respond with Resolved Locale in JSON
+
+Source: https://developers.openai.com/apps-sdk/build/mcp-server
+
+Illustrates a server response that echoes the resolved locale in the `_meta` object using the `openai/locale` key. This confirms to the client which translation was served, ensuring accurate UI messaging. If a locale is unsupported, the server should fall back to the nearest match and translate only server-managed strings.
+
+```json
+"_meta": {
+  "openai/outputTemplate": "ui://widget/kanban-board.html",
+  "openai/locale": "en"
+}
+
+```
+
+--------------------------------
+
+### Registering a Search Tool with OpenAI SDK
+
+Source: https://developers.openai.com/apps-sdk/reference
+
+Demonstrates how to register a tool named 'search' using the OpenAI SDK. It includes defining the tool's metadata, input schema, security schemes, and custom _meta fields for UI and invocation status. The tool executes a `performSearch` function.
+
+```javascript
+server.registerTool(
+  "search",
+  {
+    title: "Public Search",
+    description: "Search public documents.",
+    inputSchema: {
+      type: "object",
+      properties: { q: { type: "string" } },
+      required: ["q"]
+    },
+    securitySchemes: [
+      { type: "noauth" },
+      { type: "oauth2", scopes: ["search.read"] }
+    ],
+    _meta: {
+      securitySchemes: [
+        { type: "noauth" },
+        { type: "oauth2", scopes: ["search.read"] }
+      ],
+      "openai/outputTemplate": "ui://widget/story.html",
+      "openai/toolInvocation/invoking": "Searching…",
+      "openai/toolInvocation/invoked": "Results ready"
+    }
+  },
+  async ({ q }) => performSearch(q)
+);
+
+```
+
+--------------------------------
+
+### Registering a Read-Only Tool with OpenAI SDK
+
+Source: https://developers.openai.com/apps-sdk/reference
+
+Shows how to register a tool that is marked as read-only using the `readOnlyHint` annotation in the OpenAI SDK. This tool, 'list_saved_recipes', fetches user recipes without modifying them, and its descriptor includes this hint to inform the model.
+
+```javascript
+server.registerTool(
+  "list_saved_recipes",
+  {
+    title: "List saved recipes",
+    description: "Returns the user’s saved recipes without modifying them.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true }
+  },
+  async () => fetchSavedRecipes()
+);
+
+```
+
+--------------------------------
+
+### Custom Auth with OAuth 2.1
+
+Source: https://developers.openai.com/apps-sdk/build/auth
+
+Details on integrating a full OAuth 2.1 flow for connecting to external systems and conforming to the MCP authorization specification.
+
+```APIDOC
+## Custom auth with OAuth 2.1
+
+When you need to talk to an external system—CRM records, proprietary APIs, shared datasets—you can integrate a full OAuth 2.1 flow that conforms to the MCP authorization spec.
+
+### Components
+  * **Resource server** – your MCP server, which exposes tools and verifies access tokens on each request.
+  * **Authorization server** – your identity provider (Auth0, Okta, Cognito, or a custom implementation) that issues tokens and publishes discovery metadata.
+  * **Client** – ChatGPT acting on behalf of the user. It supports dynamic client registration and PKCE.
+```
+
+--------------------------------
+
+### Handling Tool Errors with _meta["mcp/www_authenticate"]
+
+Source: https://developers.openai.com/apps-sdk/reference
+
+This section explains how to signal an error from a tool result by using the `_meta["mcp/www_authenticate"]` key. This is particularly useful for triggering OAuth flows by providing RFC 7235 `WWW-Authenticate` challenges.
+
+```javascript
+// Example illustrating the concept, actual implementation depends on error handling logic
+// return {
+//   _meta: {
+//     "mcp/www_authenticate": "Bearer realm=\"example\",error=\"invalid_token\",error_description=\"A more detailed description here\""
+//   }
+// };
+```
+
+--------------------------------
+
+### Send Follow-up Messages - JavaScript
+
+Source: https://developers.openai.com/apps-sdk/plan/components
+
+Illustrates how to send human-readable updates back to the chat transcript using `sendFollowUpMessage`. This keeps the conversation context meaningful for the user.
+
+```javascript
+const updateMessage = 'User updated the record.';
+window.openai.sendFollowUpMessage(updateMessage);
+```
+
+--------------------------------
+
+### Required Endpoints for Authorization Server
+
+Source: https://developers.openai.com/apps-sdk/build/auth
+
+Lists the essential endpoints that your custom authorization server must provide to support the MCP authorization spec.
+
+```APIDOC
+### Required endpoints
+
+Your authorization server must provide:
+
+  * `/.well-known/oauth-protected-resource` – lists the authorization servers and required scopes for your MCP endpoint.
+  * `/.well-known/openid-configuration` – discovery document. It must include: 
+    * `authorization_endpoint`
+    * `token_endpoint` (often `/oauth/token`)
+    * `jwks_uri`
+    * `registration_endpoint`
+  * `token_endpoint` – accepts code+PKCE exchanges and returns access tokens.
+  * `registration_endpoint` – accepts dynamic client registration requests and returns a `client_id`.
+```
+
+--------------------------------
+
+### Persist Component State - JavaScript
+
+Source: https://developers.openai.com/apps-sdk/plan/components
+
+Shows how to use the `window.openai.setWidgetState` API to persist state that the host application should remember, such as selected items or scroll positions.
+
+```javascript
+const selectedRecord = 'some_id';
+window.openai.setWidgetState({ selectedRecord: selectedRecord });
+```
+
+--------------------------------
+
+### TypeScript Tool Registration with 'noauth' and 'oauth2' Security
+
+Source: https://developers.openai.com/apps-sdk/build/auth
+
+Demonstrates registering a tool in the TypeScript SDK with 'noauth' and optional 'oauth2' scopes. This allows anonymous access but also supports authenticated access with specific scopes. It uses Zod for input schema validation.
+
+```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+
+declare const server: McpServer;
+
+server.registerTool(
+  "search",
+  {
+    title: "Public Search",
+    description: "Search public documents.",
+    inputSchema: {
+      type: "object",
+      properties: { q: { type: "string" } },
+      required: ["q"],
+    },
+    securitySchemes: [
+      { type: "noauth" },
+      { type: "oauth2", scopes: ["search.read"] },
+    ],
+  },
+  async ({ input }) => {
+    return {
+      content: [{ type: "text", text: `Results for ${input.q}` }],
+      structuredContent: {},
+    };
+  }
+);
+
+```
+
+--------------------------------
+
+### TypeScript Tool Registration with Required 'oauth2' Security
+
+Source: https://developers.openai.com/apps-sdk/build/auth
+
+Shows how to register a tool in the TypeScript SDK where 'oauth2' authentication with specific scopes is strictly required. This ensures that the tool can only be invoked by authenticated users with the necessary permissions.
+
+```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+
+declare const server: McpServer;
+
+server.registerTool(
+  "create_doc",
+  {
+    title: "Create Document",
+    description: "Make a new doc in your account.",
+    inputSchema: {
+      type: "object",
+      properties: { title: { type: "string" } },
+      required: ["title"],
+    },
+    securitySchemes: [{ type: "oauth2", scopes: ["docs.write"] }],
+  },
+  async ({ input }) => {
+    return {
+      content: [{ type: "text", text: `Created doc: ${input.title}` }],
+      structuredContent: {},
+    };
+  }
+);
+
+```
+
+--------------------------------
+
+### Persist Ephemeral UI State with setWidgetState - Apps SDK
+
+Source: https://developers.openai.com/apps-sdk/build/storage
+
+Use `window.openai.setWidgetState` to manage ephemeral UI state within a conversation. This state, such as selected tabs or collapsed sections, is ideal for restoring context after follow-up prompts and travels with the conversation.
+
+```javascript
+window.openai.setWidgetState({
+  "selectedTab": "settings",
+  "collapsedSections": ["advanced"]
+});
+```
+
+--------------------------------
+
+### Update Component State After Tool Call - JavaScript
+
+Source: https://developers.openai.com/apps-sdk/plan/components
+
+Explains how to use the return value of `callTool` to update the component's state on subsequent turns. This ensures the component reflects the latest data after user interactions.
+
+```javascript
+// After a call to callTool()
+const newData = callTool(...);
+// Use newData to update the component's state.
+```

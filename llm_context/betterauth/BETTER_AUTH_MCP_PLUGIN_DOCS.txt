@@ -1,0 +1,1731 @@
+### Configure Better Auth with MCP Plugin
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/mcp.mdx
+
+Integrate the MCP plugin into your Better Auth configuration by importing it and adding it to the `plugins` array. This setup requires specifying the path to your application's login page, such as `/sign-in`. This plugin acts as an OAuth provider for MCP clients, handling authentication and token management.
+
+```typescript
+import { betterAuth } from "better-auth";
+import { mcp } from "better-auth/plugins";
+
+export const auth = betterAuth({
+    plugins: [
+                mcp({
+                    loginPage: "/sign-in" // path to your login page
+                })
+            ]
+});
+```
+
+--------------------------------
+
+### Configure MCP plugin (TypeScript)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/blogs/1-3.mdx
+
+Adds the MCP plugin to the Better Auth instance and configures a custom login page. Requires importing mcp from better-auth/plugins and registering it under plugins. Input is plugin options; output is an auth instance with MCP behavior enabled.
+
+```typescript
+import { mcp } from "better-auth/plugins";
+
+export const auth = betterAuth({
+  plugins: [
+    mcp({
+      loginPage: "/login",
+    }),
+  ],
+});
+```
+
+--------------------------------
+
+### Manually Get MCP Session with `auth.api.getMcpSession` (TypeScript)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/mcp.mdx
+
+This TypeScript example illustrates how to manually retrieve an MCP session using `auth.api.getMcpSession` from the `auth` object. It is crucial to explicitly check for the session's existence and return a `401` Unauthorized status if no session is found. The retrieved session, containing access token records, is then used in conjunction with `@vercel/mcp-adapter` to set up a tool handler.
+
+```ts
+import { auth } from "@/lib/auth";
+import { createMcpHandler } from "@vercel/mcp-adapter";
+import { z } from "zod";
+
+const handler = async (req: Request) => {
+     // session contains the access token record with scopes and user ID
+    const session = await auth.api.getMcpSession({
+        headers: req.headers
+    })
+    if(!session){
+        //this is important and you must return 401
+        return new Response(null, {
+            status: 401
+        })
+    }
+    return createMcpHandler(
+        (server) => {
+            server.tool(
+                "echo",
+                "Echo a message",
+                { message: z.string() },
+                async ({ message }) => {
+                    return {
+                        content: [{ type: "text", text: `Tool echo: ${message}` }],
+                    };
+                },
+            );
+        },
+        {
+            capabilities: {
+                tools: {
+                    echo: {
+                        description: "Echo a message",
+                    },
+                },
+            },
+        },
+        {
+            redisUrl: process.env.REDIS_URL,
+            basePath: "/api",
+            verboseLogs: true,
+            maxDuration: 60,
+        },
+    )(req);
+}
+
+export { handler as GET, handler as POST, handler as DELETE };
+```
+
+--------------------------------
+
+### Expose OAuth Protected Resource Metadata for MCP Clients
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/mcp.mdx
+
+Implement an API route to expose OAuth protected resource metadata specifically for MCP clients. This route addresses potential client-side parsing problems with `WWW-Authenticate` headers or CORS, which might prevent them from using the default Better Auth route. Setting this up guarantees reliable protected resource metadata access for MCP applications.
+
+```typescript
+import { oAuthProtectedResourceMetadata } from "better-auth/plugins";
+import { auth } from "@/lib/auth";
+
+export const GET = oAuthProtectedResourceMetadata(auth);
+```
+
+--------------------------------
+
+### Handle MCP Session with `withMcpAuth` Helper (TypeScript)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/mcp.mdx
+
+This TypeScript snippet demonstrates how to use the `withMcpAuth` helper from `better-auth/plugins` to automatically manage MCP session authentication for API routes. It integrates with `@vercel/mcp-adapter` to create a tool server, passing the session which contains access token details and user ID. This helper simplifies authentication by handling unauthenticated calls automatically.
+
+```ts
+import { auth } from "@/lib/auth";
+import { createMcpHandler } from "@vercel/mcp-adapter";
+import { withMcpAuth } from "better-auth/plugins";
+import { z } from "zod";
+
+const handler = withMcpAuth(auth, (req, session) => {
+    // session contains the access token record with scopes and user ID
+    return createMcpHandler(
+        (server) => {
+            server.tool(
+                "echo",
+                "Echo a message",
+                { message: z.string() },
+                async ({ message }) => {
+                    return {
+                        content: [{ type: "text", text: `Tool echo: ${message}` }],
+                    };
+                },
+            );
+        },
+        {
+            capabilities: {
+                tools: {
+                    echo: {
+                        description: "Echo a message",
+                    },
+                },
+            },
+        },
+        {
+            redisUrl: process.env.REDIS_URL,
+            basePath: "/api",
+            verboseLogs: true,
+            maxDuration: 60,
+        },
+    )(req);
+});
+
+export { handler as GET, handler as POST, handler as DELETE };
+```
+
+--------------------------------
+
+### Protect MCP Endpoint with `withMcpAuth` (Server-side TypeScript)
+
+Source: https://context7.com/better-auth/better-auth/llms.txt
+
+This TypeScript example demonstrates how to secure a server-side endpoint using the `withMcpAuth` middleware from the `better-auth/plugins` library. It ensures that only authenticated MCP requests can access the resource, providing the OAuth access token data (session) for application logic.
+
+```typescript
+import { withMcpAuth } from "better-auth/plugins";
+
+// Example: Protect an MCP endpoint
+export async function POST(req: Request) {
+  return withMcpAuth(auth, async (req, session) => {
+    // session contains OAuth access token data
+    const user = await db.user.findById(session.userId);
+
+    // Handle the MCP request
+    return Response.json({
+      message: "Protected MCP resource",
+      user: user,
+    });
+  })(req);
+}
+```
+
+--------------------------------
+
+### Expose OAuth Discovery Metadata for MCP Clients
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/mcp.mdx
+
+Create a dedicated API route to expose OAuth discovery metadata for MCP clients. While Better Auth automatically handles a default route, some clients may require this explicit route due to issues parsing `WWW-Authenticate` headers or CORS configurations. This ensures proper discovery for all MCP applications.
+
+```typescript
+import { oAuthDiscoveryMetadata } from "better-auth/plugins";
+import { auth } from "../../../lib/auth";
+
+export const GET = oAuthDiscoveryMetadata(auth);
+```
+
+--------------------------------
+
+### Manually Configure Better Auth MCP Server
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/introduction.mdx
+
+For advanced users, Better Auth allows manual configuration of its Model Context Protocol (MCP) server with various AI clients. This involves directly adding the MCP endpoint to client settings, either via command-line utilities (like for Claude Code) or by editing configuration files (such as `opencode.json` for Open Code or a generic `mcp.json` file).
+
+```bash
+claude mcp add --transport http better-auth https://mcp.chonkie.ai/better-auth/better-auth-builder/mcp
+```
+
+```json
+{
+            "$schema": "https://opencode.ai/config.json",
+            "mcp": {
+                "Better Auth": {
+                    "type": "remote",
+                    "url": "https://mcp.chonkie.ai/better-auth/better-auth-builder/mcp",
+                    "enabled": true
+                }
+            }
+        }
+```
+
+```json
+{
+        "Better Auth": {
+            "url": "https://mcp.chonkie.ai/better-auth/better-auth-builder/mcp"
+        }
+    }
+```
+
+--------------------------------
+
+### Perform Dynamic Client Registration for MCP (Server-side JavaScript)
+
+Source: https://context7.com/better-auth/better-auth/llms.txt
+
+This JavaScript snippet illustrates how an MCP client can dynamically register itself with the Better Auth server. It sends a POST request to the `/api/auth/mcp/register` endpoint with client details, receiving `client_id` and `client_secret` to initiate OAuth flows.
+
+```typescript
+// Client Registration (Dynamic Client Registration)
+// MCP clients can register themselves dynamically
+const response = await fetch("/api/auth/mcp/register", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    redirect_uris: ["http://localhost:3000/callback"],
+    client_name: "My MCP Client",
+    token_endpoint_auth_method: "client_secret_post",
+    grant_types: ["authorization_code", "refresh_token"],
+  }),
+});
+
+const { client_id, client_secret } = await response.json();
+
+// Use client credentials for OAuth flow
+// The MCP client can now use the authorization_code flow
+```
+
+--------------------------------
+
+### Configure Model Context Protocol (MCP) Plugin in Better Auth (TypeScript)
+
+Source: https://context7.com/better-auth/better-auth/llms.txt
+
+This TypeScript configuration sets up the `mcp` plugin for `better-auth`, enabling OAuth 2.0 server capabilities for AI assistant integration. It defines the login page, an optional resource identifier, and allows customization of OIDC token expiration times and scopes.
+
+```typescript
+import { betterAuth } from "better-auth";
+import { mcp } from "better-auth/plugins";
+
+export const auth = betterAuth({
+  plugins: [
+    mcp({
+      loginPage: "/login", // Login page for user authentication
+      resource: "https://your-app.com", // Optional: protected resource identifier
+
+      // Optional OIDC configuration
+      oidcConfig: {
+        codeExpiresIn: 600, // 10 minutes
+        accessTokenExpiresIn: 3600, // 1 hour
+        refreshTokenExpiresIn: 604800, // 7 days
+        scopes: ["openid", "profile", "email", "offline_access"],
+      },
+    }),
+  ],
+});
+```
+
+--------------------------------
+
+### Add MCP Server using Better Auth CLI
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/introduction.mdx
+
+Use the Better Auth Command Line Interface (CLI) to easily add and configure the Model Context Protocol (MCP) server for various AI clients. These commands streamline the integration process by targeting specific client environments like Cursor, Claude Code, and Open Code.
+
+```bash
+pnpm @better-auth/cli mcp --cursor
+```
+
+```bash
+pnpm @better-auth/cli mcp --claude-code
+```
+
+```bash
+pnpm @better-auth/cli mcp --open-code
+```
+
+```bash
+pnpm @better-auth/cli mcp --manual
+```
+
+--------------------------------
+
+### Configure JWT Plugin for OAuth Provider Mode
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/jwt.mdx
+
+This TypeScript snippet demonstrates how to configure the JWT plugin for OAuth provider mode. It disables the default `/token` endpoint and prevents the `set-auth-jwt` header from being set, which is necessary when integrating with OIDC or MCP plugins for OAuth compliance.
+
+```ts
+betterAuth({
+  disabledPaths: [
+    "/token",
+  ],
+  plugins: [jwt({
+    disableSettingJwtHeader: true,
+  })]
+})
+```
+
+--------------------------------
+
+### Create State Management Atoms in Client Plugin
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/concepts/plugins.mdx
+
+Demonstrates getAtoms implementation using nanostores for state management in client plugins. Provides reactive atoms that can be consumed by framework-specific hooks through nanostores.
+
+```typescript
+import { atom } from "nanostores";
+import type { BetterAuthClientPlugin } from "better-auth/client";
+
+const myPluginClient = {
+    id: "my-plugin",
+    $InferServerPlugin: {} as ReturnType<typeof myPlugin>,
+    getAtoms: ($fetch)=>{
+        const myAtom = atom<null>()
+        return {
+            myAtom
+        }
+    }
+} satisfies BetterAuthClientPlugin
+```
+
+--------------------------------
+
+### Infer Server Endpoints in Client Plugin
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/concepts/plugins.mdx
+
+Shows how to configure a client plugin to automatically infer endpoints from the corresponding server plugin using $InferServerPlugin. Converts kebab-case paths to camelCase properties.
+
+```typescript
+import type { BetterAuthClientPlugin } from "better-auth/client";
+import type { myPlugin } from "./plugin";
+
+const myPluginClient = ()=> {
+    return  {
+        id: "my-plugin",
+        $InferServerPlugin: {} as ReturnType<typeof myPlugin>,
+    } satisfies BetterAuthClientPlugin
+}
+```
+
+--------------------------------
+
+### PayPal Provider Configuration with Advanced Options
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/authentication/paypal.mdx
+
+Advanced PayPal provider setup including environment selection for production and optional shipping address request. Demonstrates configuring the provider for live deployment with additional user information collection.
+
+```typescript
+export const auth = betterAuth({
+    socialProviders: {
+        paypal: {
+            clientId: process.env.PAYPAL_CLIENT_ID as string,
+            clientSecret: process.env.PAYPAL_CLIENT_SECRET as string,
+            environment: "live",
+            requestShippingAddress: true
+        }
+    }
+})
+```
+
+--------------------------------
+
+### Configure Apple Provider
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/authentication/apple.mdx
+
+Shows how to configure the Apple OAuth provider in better-auth by adding it to the socialProviders option and setting trustedOrigins.
+
+```typescript
+import { betterAuth } from "better-auth"
+
+export const auth = betterAuth({
+    socialProviders: {
+```
+
+--------------------------------
+
+### POST /two-factor/verify-otp
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/2fa.mdx
+
+Verifies the One-Time Password (OTP) provided by the user. If successful, it completes the 2FA process.
+
+```APIDOC
+## POST /two-factor/verify-otp
+
+### Description
+Verifies the One-Time Password (OTP) provided by the user. If successful, it completes the 2FA process.
+
+### Method
+POST
+
+### Endpoint
+/two-factor/verify-otp
+
+### Parameters
+#### Path Parameters
+
+#### Query Parameters
+
+#### Request Body
+- **code** (string) - Required - The otp code to verify.
+- **trustDevice** (boolean) - Optional - If true, the device will be trusted for 30 days. It'll be refreshed on every sign in request within this time. (Default: `true`)
+
+### Request Example
+```json
+{
+  "code": "012345",
+  "trustDevice": true
+}
+```
+
+### Response
+#### Success Response (200)
+(No explicit success response body is defined, implying success is indicated by status code)
+
+#### Response Example
+```json
+{}
+```
+```
+
+--------------------------------
+
+### POST /two-factor/send-otp
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/2fa.mdx
+
+Initiates the sending of a One-Time Password (OTP) to the user. This triggers the custom `sendOTP` implementation configured in Better Auth.
+
+```APIDOC
+## POST /two-factor/send-otp
+
+### Description
+Initiates the sending of a One-Time Password (OTP) to the user. This triggers the custom `sendOTP` implementation configured in Better Auth.
+
+### Method
+POST
+
+### Endpoint
+/two-factor/send-otp
+
+### Parameters
+#### Path Parameters
+
+#### Query Parameters
+
+#### Request Body
+- **trustDevice** (boolean) - Optional - If true, the device will be trusted for 30 days. It'll be refreshed on every sign in request within this time. (Default: `true`)
+
+### Request Example
+```json
+{
+  "trustDevice": true
+}
+```
+
+### Response
+#### Success Response (200)
+(No explicit success response body is defined, implying success is indicated by status code or subsequent redirect/UI change)
+
+#### Response Example
+```json
+{}
+```
+```
+
+--------------------------------
+
+### Build Plasmo extension for production (pnpm)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/guides/browser-extension-guide.mdx
+
+This command is used to create a production build of the Plasmo browser extension. The output can then be loaded into a browser for testing or distribution.
+
+```bash
+pnpm build
+```
+
+--------------------------------
+
+### Create token helper for Convex server actions in TypeScript
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/integrations/convex.mdx
+
+Defines a utility function to retrieve authentication tokens for use in Convex functions called from server-side code. This ensures that server actions can securely interact with authenticated Convex mutations.
+
+```typescript
+import { createAuth } from "@/convex/auth";
+import { getToken as getTokenNextjs } from "@convex-dev/better-auth/nextjs";
+
+export const getToken = () => {
+  return getTokenNextjs(createAuth);
+};
+```
+
+--------------------------------
+
+### POST /multi-session/revoke
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/multi-session.mdx
+
+This endpoint allows you to revoke a specific session for the current user, effectively logging them out from that particular device or instance. This enhances security by allowing users to terminate unwanted sessions.
+
+```APIDOC
+## POST /multi-session/revoke
+
+### Description
+Revokes a specific session for the current user, invalidating it.
+
+### Method
+POST
+
+### Endpoint
+/multi-session/revoke
+
+### Parameters
+#### Path Parameters
+_None_
+
+#### Query Parameters
+_None_
+
+#### Request Body
+- **sessionToken** (string) - Required - The session token to revoke.
+
+### Request Example
+```json
+{
+  "sessionToken": "some-session-token"
+}
+```
+
+### Response
+#### Success Response (200)
+- **message** (string) - Confirmation message.
+- **success** (boolean) - Indicates if the operation was successful.
+
+#### Response Example
+```json
+{
+  "message": "Session revoked successfully.",
+  "success": true
+}
+```
+```
+
+--------------------------------
+
+### Remove Clerk dependencies (Shell)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/guides/clerk-migration-guide.mdx
+
+Shell command to remove Clerk packages from your project once migration is verified. Dependency: pnpm package manager (adjust command for npm or yarn if needed). Input: project with Clerk packages installed; Output: Clerk packages removed; limitation: ensure all code references to Clerk are updated before removing.
+
+```bash
+pnpm remove @clerk/nextjs @clerk/themes @clerk/types
+```
+
+--------------------------------
+
+### GET /my-plugin/hello-world
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/concepts/plugins.mdx
+
+Example of an authenticated endpoint created with createAuthEndpoint and protected by sessionMiddleware. The middleware populates ctx.context.session when a valid session exists.
+
+```APIDOC
+## GET /my-plugin/hello-world
+
+### Description
+Authenticated endpoint example that uses `sessionMiddleware` to ensure a valid session exists. The middleware attaches session data to `ctx.context.session` which handlers can use.
+
+### Method
+GET
+
+### Endpoint
+/my-plugin/hello-world
+
+### Parameters
+#### Path Parameters
+- None
+
+#### Query Parameters
+- None
+
+#### Request Body
+- None
+
+### Request Example
+{
+  "method": "GET",
+  "path": "/my-plugin/hello-world",
+  "headers": {
+    "Authorization": "Bearer <token>"
+  }
+}
+
+### Response
+#### Success Response (200)
+- **message** (string) - A success message
+- **session** (object) - (optional) Session data added to `ctx.context.session`
+
+#### Response Example
+{
+  "message": "Hello World",
+  "session": {
+    "userId": "user_123",
+    "email": "user@example.com"
+  }
+}
+```
+
+--------------------------------
+
+### Perform Basic Apple Sign-In with better-auth Client
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/authentication/apple.mdx
+
+This TypeScript example demonstrates how to initiate a standard Apple Sign-In flow using the `better-auth` client. It uses the `signIn.social` function, specifying `apple` as the authentication provider, which typically redirects the user for authentication.
+
+```typescript
+import { createAuthClient } from "better-auth/client"
+const authClient =  createAuthClient()
+
+const signIn = async () => {
+    const data = await authClient.signIn.social({
+        provider: "apple"
+    })
+}
+```
+
+--------------------------------
+
+### Configure Apple Sign-In in better-auth
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/authentication/apple.mdx
+
+This configuration snippet shows how to set up Apple as a social login provider within the `better-auth` system. It includes parameters such as `clientId`, `clientSecret`, and the optional `appBundleIdentifier` for iOS native sign-in, along with `trustedOrigins` for Apple's authentication domain.
+
+```typescript
+apple: {
+    clientId: process.env.APPLE_CLIENT_ID as string,
+    clientSecret: process.env.APPLE_CLIENT_SECRET as string,
+    // Optional
+    appBundleIdentifier: process.env.APPLE_APP_BUNDLE_IDENTIFIER as string
+},
+// Add appleid.apple.com to trustedOrigins for Sign In with Apple flows
+trustedOrigins: ["https://appleid.apple.com"]
+```
+
+--------------------------------
+
+### Configure OTP Sending with Better Auth Plugin
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/2fa.mdx
+
+This configuration snippet demonstrates how to set up the `sendOTP` function within Better Auth's `twoFactor` plugin. This asynchronous function is responsible for sending the generated OTP to the user via their preferred method (e.g., email, phone) before verification can proceed.
+
+```ts
+import { betterAuth } from "better-auth"
+import { twoFactor } from "better-auth/plugins"
+
+export const auth = betterAuth({
+    plugins: [
+        twoFactor({
+          	otpOptions: {
+				async sendOTP({ user, otp }, request) {
+                    // send otp to user
+				},
+			},
+        })
+    ]
+})
+```
+
+--------------------------------
+
+### Define Two-Factor Authentication Schema with Drizzle ORM for MySQL
+
+Source: https://github.com/better-auth/better-auth/blob/canary/packages/cli/test/__snapshots__/auth-schema-mysql-number-id.txt
+
+This schema defines the `two_factor` table for storing two-factor authentication details in a MySQL database using Drizzle ORM. It includes the secret for TOTP generation and backup codes. It links to the `custom_user` table with a cascade delete. The `id` is an auto-incrementing primary key.
+
+```typescript
+export const twoFactor = mysqlTable("two_factor", {
+  id: int("id").autoincrement().primaryKey(),
+  secret: text("secret").notNull(),
+  backupCodes: text("backup_codes").notNull(),
+  userId: int("user_id")
+    .notNull()
+    .references(() => custom_user.id, { onDelete: "cascade" })
+});
+```
+
+--------------------------------
+
+### POST /api/openBillingPortal
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/autumn.mdx
+
+Open billing portal for payment method updates or plan management
+
+```APIDOC
+## POST /api/openBillingPortal
+
+### Description
+Opens customer billing portal for payment and subscription management
+
+### Method
+POST
+
+### Endpoint
+/api/openBillingPortal
+
+### Parameters
+#### Request Body
+- **returnUrl** (string) - Optional - URL to redirect after portal session
+
+### Request Example
+{
+  "returnUrl": "/settings/billing"
+}
+
+### Response
+#### Success Response (200)
+- **portalUrl** (string) - URL to the billing portal session
+```
+
+--------------------------------
+
+### Integrate Better Auth Plugins (TypeScript)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/reference/options.mdx
+
+This snippet demonstrates how to add and configure plugins, specifically the `emailOTP` plugin, to extend `better-auth` functionality. It shows how to pass configuration options to the plugin, including a custom function for sending verification OTPs to users' emails.
+
+```typescript
+import { betterAuth } from "better-auth";
+import { emailOTP } from "better-auth/plugins";
+
+export const auth = betterAuth({
+	plugins: [
+		emailOTP({
+			sendVerificationOTP: async ({ email, otp, type }) => {
+				// Send OTP to user's email
+			}
+		})
+	]
+})
+```
+
+--------------------------------
+
+### GET /multi-session/list-device-sessions
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/multi-session.mdx
+
+This endpoint allows you to retrieve a list of all active device sessions for the currently logged-in user. It provides an overview of all places where the user is currently active.
+
+```APIDOC
+## GET /multi-session/list-device-sessions
+
+### Description
+Lists all active sessions for the current user.
+
+### Method
+GET
+
+### Endpoint
+/multi-session/list-device-sessions
+
+### Parameters
+#### Path Parameters
+_None_
+
+#### Query Parameters
+_None_
+
+#### Request Body
+_None_
+
+### Request Example
+{}
+
+### Response
+#### Success Response (200)
+- **id** (string) - Unique identifier for the session.
+- **token** (string) - The session token.
+- **createdAt** (string) - Timestamp when the session was created (ISO 8601 format).
+- **lastUsedAt** (string) - Timestamp when the session was last used (ISO 8601 format).
+
+#### Response Example
+```json
+[
+  {
+    "id": "session_abc123",
+    "token": "some-session-token-1",
+    "createdAt": "2023-01-01T10:00:00Z",
+    "lastUsedAt": "2023-01-01T10:30:00Z"
+  },
+  {
+    "id": "session_def456",
+    "token": "some-session-token-2",
+    "createdAt": "2023-01-02T11:00:00Z",
+    "lastUsedAt": "2023-01-02T11:15:00Z"
+  }
+]
+```
+```
+
+--------------------------------
+
+### Verify OTP with Better Auth `twoFactor.verifyOtp`
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/2fa.mdx
+
+This snippet illustrates the `verifyOTP` type, used when verifying a One-Time Password. It requires the `code` entered by the user and optionally accepts a `trustDevice` boolean to remember the device for future logins, reducing 2FA prompts.
+
+```ts
+type verifyOTP = {
+    /**
+     * The otp code to verify. 
+     */
+    code: string = "012345"
+    /**
+     * If true, the device will be trusted for 30 days. It'll be refreshed on every sign in request within this time. 
+     */
+    trustDevice?: boolean = true
+}
+```
+
+--------------------------------
+
+### Rate Limit Configuration
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/concepts/plugins.mdx
+
+Configure custom rate limit rules for your plugin by supplying a `rateLimit` array. Each rule specifies a path matcher, request limit, and time window in seconds.
+
+```APIDOC
+## PLUGIN plugin.rateLimit
+
+### Description
+Define custom rate limit rules for plugin endpoints using the `rateLimit` array. Each rule contains a `pathMatcher` function, a numeric `limit`, and a `window` duration in seconds.
+
+### Method
+PLUGIN
+
+### Endpoint
+plugin.rateLimit (array)
+
+### Parameters
+#### Path Parameters
+- None
+
+#### Query Parameters
+- None
+
+#### Request Body
+- **rateLimit** (array) - Required - Array of rate limit rule objects
+  - **pathMatcher** (function) - Required - Function that receives a path and returns true for matching paths
+  - **limit** (number) - Required - Max requests allowed in the window
+  - **window** (number) - Required - Window size in seconds
+
+### Request Example
+{
+  "id": "my-plugin",
+  "rateLimit": [
+    {
+      "pathMatcher": "(path) => path === \"/my-plugin/hello-world\"",
+      "limit": 10,
+      "window": 60
+    }
+  ]
+}
+
+### Response
+#### Success Response (200)
+- **message** (string) - Confirmation that rate limit rules were registered
+
+#### Response Example
+{
+  "message": "Rate limit rule registered"
+}
+```
+
+--------------------------------
+
+### Define resetPasswordEmailOTP Type in TypeScript
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/email-otp.mdx
+
+This TypeScript type specifies the payload required to reset a user's password using an OTP. It takes the user's `email`, the `otp` received, and the `new-secure-password`.
+
+```ts
+type resetPasswordEmailOTP = {
+    /**
+     * Email address to reset the password. 
+     */
+    email: string = "user@example.com"
+    /**
+     * OTP sent to the email. 
+     */
+    otp: string = "123456"
+    /**
+     * New password. 
+     */
+    password: string = "new-secure-password"
+}
+```
+
+--------------------------------
+
+### Install Better Auth Package
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/installation.mdx
+
+Installs the Better Auth package into your project using a package manager. This step is required for both client and server setups if using a separate client and server architecture.
+
+```shell
+better-auth
+```
+
+--------------------------------
+
+### Create Better Auth Client - Solid.js
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/integrations/astro.mdx
+
+Sets up Better Auth client for Solid.js framework. Leverages better-auth/solid package for Solid-specific reactivity patterns.
+
+```typescript
+import { createAuthClient } from "better-auth/solid"
+export const authClient =  createAuthClient()
+```
+
+--------------------------------
+
+### Define Type for Performing Email Verification with OTP (TypeScript)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/email-otp.mdx
+
+This type definition ('verifyEmailOTP') outlines the necessary parameters to finalize an email verification using an OTP. It includes the email to be verified and the OTP provided by the user.
+
+```ts
+type verifyEmailOTP = {
+    /**
+     * Email address to verify. 
+     */
+    email: string = "user@example.com"
+    /**
+     * OTP to verify. 
+     */
+    otp: string = "123456"
+}
+```
+
+--------------------------------
+
+### Configure TikTok provider - TypeScript
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/authentication/tiktok.mdx
+
+Sets up the TikTok social provider for the better-auth server-side configuration. Depends on the better-auth package and expects TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET in environment variables; outputs an auth instance with a configured socialProviders.tiktok entry. Limitations: redirect URLs must be HTTPS and use a public domain for testing (use ngrok for local testing), and you must request appropriate TikTok scopes in production.
+
+```typescript
+import { betterAuth } from "better-auth"
+
+export const auth = betterAuth({
+    socialProviders: {
+        tiktok: { // [!code highlight]
+            clientSecret: process.env.TIKTOK_CLIENT_SECRET as string, // [!code highlight]
+            clientKey: process.env.TIKTOK_CLIENT_KEY as string, // [!code highlight]
+        }, // [!code highlight]
+    },
+})
+```
+
+--------------------------------
+
+### Define Two-Factor Authentication Table with Drizzle ORM SQLite
+
+Source: https://github.com/better-auth/better-auth/blob/canary/packages/cli/test/__snapshots__/auth-schema-sqlite-number-id.txt
+
+Creates a twoFactor table for storing two-factor authentication secrets and backup codes linked to users. Includes cascade delete on user removal to maintain referential integrity.
+
+```typescript
+export const twoFactor = sqliteTable("two_factor", {
+  id: integer("id", { mode: "number" }).primaryKey({ autoIncrement: true }),
+  secret: text("secret").notNull(),
+  backupCodes: text("backup_codes").notNull(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => custom_user.id, { onDelete: "cascade" }),
+});
+```
+
+--------------------------------
+
+### Install Better Auth and Convex packages
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/integrations/convex.mdx
+
+Installs the `@convex-dev/better-auth` component, a pinned version of `better-auth`, and the latest version of `convex`. This component requires Convex `1.25.0` or later.
+
+```npm
+npm install better-auth@1.3.27 --save-exact
+npm install convex@latest @convex-dev/better-auth
+```
+
+--------------------------------
+
+### Define forgetPasswordEmailOTP Type in TypeScript
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/email-otp.mdx
+
+This TypeScript type defines the structure for the payload used to request a 'forget-password' OTP. It requires an `email` string to specify the recipient.
+
+```ts
+type forgetPasswordEmailOTP = {
+    /**
+     * Email address to send the OTP. 
+     */
+    email: string = "user@example.com"
+}
+```
+
+--------------------------------
+
+### Define twoFactor MySQL Table Schema for 2FA with Drizzle ORM
+
+Source: https://github.com/better-auth/better-auth/blob/canary/packages/cli/test/__snapshots__/auth-schema-mysql.txt
+
+Defines the `twoFactor` table to store secrets and backup codes for two-factor authentication (2FA). It includes a unique ID, the 2FA secret, backup codes, and a foreign key linking it to the `custom_user` table. This table secures user accounts with an additional layer of authentication.
+
+```typescript
+export const twoFactor = mysqlTable("two_factor", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  secret: text("secret").notNull(),
+  backupCodes: text("backup_codes").notNull(),
+  userId: varchar("user_id", { length: 36 })
+    .notNull()
+    .references(() => custom_user.id, { onDelete: "cascade" }),
+});
+```
+
+--------------------------------
+
+### Install Dependencies with pnpm
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/reference/contributing.mdx
+
+Install BetterAuth project dependencies using pnpm package manager. Requires pnpm to be installed on the system.
+
+```bash
+pnpm install
+```
+
+--------------------------------
+
+### List customer subscriptions and payments (TypeScript)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/dodopayments.mdx
+
+Examples for listing a customer's subscriptions and payment history via the client plugin. Inputs: query parameters like limit, page, and status; outputs: paginated lists returned under data. Handle possible errors from the returned error object.
+
+```typescript
+// Get subscriptions
+const { data: subscriptions, error } =
+  await authClient.dodopayments.customer.subscriptions.list({
+    query: {
+      limit: 10,
+      page: 1,
+      active: true,
+    },
+  });
+
+// Get payment history
+const { data: payments, error: paymentsError } = await authClient.dodopayments.customer.payments.list({
+  query: {
+    limit: 10,
+    page: 1,
+    status: "succeeded",
+  },
+});
+```
+
+--------------------------------
+
+### POST /is-username-available
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/username.mdx
+
+Checks if a given username is available for registration or use. This can be used to validate usernames before submission.
+
+```APIDOC
+## POST /is-username-available
+
+### Description
+Checks if a given username is available for registration or use. This can be used to validate usernames before submission.
+
+### Method
+POST
+
+### Endpoint
+/is-username-available
+
+### Parameters
+#### Path Parameters
+(None)
+
+#### Query Parameters
+(None)
+
+#### Request Body
+- **username** (string) - Required - The username to check for availability.
+
+### Request Example
+{
+  "username": "new-username"
+}
+
+### Response
+#### Success Response (200)
+- **available** (boolean) - Indicates whether the username is available (`true`) or not (`false`).
+
+#### Response Example
+{
+  "available": true
+}
+```
+
+--------------------------------
+
+### POST /two-factor/view-backup-codes
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/2fa.mdx
+
+Allows viewing of existing backup codes for a user. This should only be used in scenarios where the user has a fresh, newly created session for security reasons.
+
+```APIDOC
+## POST /two-factor/view-backup-codes
+
+### Description
+Allows viewing of existing backup codes for a user. This should only be used in scenarios where the user has a fresh, newly created session for security reasons.
+
+### Method
+POST
+
+### Endpoint
+/two-factor/view-backup-codes
+
+### Parameters
+#### Path Parameters
+
+#### Query Parameters
+
+#### Request Body
+- **userId** (string | null) - Optional - The user ID to view all backup codes. (Default: `"user-id"`)
+
+### Request Example
+```json
+{
+  "userId": "user-id"
+}
+```
+
+### Response
+#### Success Response (200)
+(No explicit success response body is defined, but implies the codes would be returned in the response)
+
+#### Response Example
+```json
+{}
+```
+```
+
+--------------------------------
+
+### Configure Better Auth as Convex authentication provider
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/integrations/convex.mdx
+
+Creates a `convex/auth.config.ts` file to configure Better Auth as an authentication provider. It uses the `CONVEX_SITE_URL` environment variable for the authentication domain.
+
+```typescript
+export default {
+    providers: [
+        {
+            domain: process.env.CONVEX_SITE_URL,
+            applicationID: "convex"
+        }
+    ]
+};
+```
+
+--------------------------------
+
+### POST /api/track
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/autumn.mdx
+
+Track usage events for billing and feature limits
+
+```APIDOC
+## POST /api/track
+
+### Description
+Record customer usage events for billing and limit tracking
+
+### Method
+POST
+
+### Endpoint
+/api/track
+
+### Parameters
+#### Request Body
+- **featureId** (string) - Required - The feature being used
+- **value** (number) - Optional - Amount of usage to track (default: 1)
+- **headers** (object) - Required - Request headers containing authentication
+
+### Request Example
+{
+  "featureId": "messages",
+  "value": 2
+}
+
+### Response
+#### Success Response (200)
+- **success** (boolean) - Confirmation of successful tracking
+- **newBalance** (number) - Updated balance after tracking
+```
+
+--------------------------------
+
+### POST /api/attach
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/autumn.mdx
+
+Attach a payment method or redirect to Stripe checkout for purchase
+
+```APIDOC
+## POST /api/attach
+
+### Description
+Redirects customer to Stripe checkout or opens AttachDialog for payment processing
+
+### Method
+POST
+
+### Endpoint
+/api/attach
+
+### Parameters
+#### Request Body
+- **productId** (string) - Required - The product identifier to purchase
+- **dialog** (component) - Optional - Dialog component for payment confirmation
+
+### Request Example
+{
+  "productId": "pro",
+  "dialog": "AttachDialog"
+}
+
+### Response
+#### Success Response (200)
+- **success** (boolean) - Confirmation of successful attachment
+- **redirectUrl** (string) - URL to Stripe checkout if needed
+```
+
+--------------------------------
+
+### Get Session Data Using getSessionFromCtx Helper
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/concepts/plugins.mdx
+
+Demonstrates how to retrieve client session data in a plugin hook using the getSessionFromCtx helper function with the auth middleware context.
+
+```typescript
+import {  createAuthMiddleware } from "better-auth/plugins";
+import { getSessionFromCtx } from "better-auth/api";
+
+const myPlugin = {
+    id: "my-plugin",
+    hooks: {
+        before: [{
+                matcher: (context)=>{
+                    return context.headers.get("x-my-header") === "my-value"
+                },
+                handler: createAuthMiddleware(async (ctx) => {
+                    const session = await getSessionFromCtx(ctx);
+                    //do something with the client's session.
+
+                    return  {
+                        context: ctx
+                    }
+                })
+            }],
+    }
+} satisfies BetterAuthPlugin
+```
+
+--------------------------------
+
+### Migrate Auth0 MFA Factors
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/guides/auth0-migration-guide.mdx
+
+Migrates multi-factor authentication factors from Auth0 users to the new system. Handles TOTP secrets and generates backup codes for each user.
+
+```typescript
+async function migrateMFAFactors(auth0User: any, userId: string | undefined, ctx: any) {
+    if (!userId || !auth0User.mfa_factors || !Array.isArray(auth0User.mfa_factors)) {
+        return;
+    }
+
+    for (const factor of auth0User.mfa_factors) {
+        try {
+            if (factor.totp && factor.totp.secret) {
+                await ctx.adapter.create({
+                    model: "twoFactor",
+                    data: {
+                        userId: userId,
+                        secret: factor.totp.secret,
+                        backupCodes: await generateBackupCodes(factor.totp.secret)
+                    }
+                });
+            }
+        } catch (error) {
+            console.error(`Failed to migrate MFA factor for user ${userId}:`, error);
+        }
+    }
+}
+```
+
+--------------------------------
+
+### Email OTP Plugin - Setup and Client Usage
+
+Source: https://context7.com/better-auth/better-auth/llms.txt
+
+Configures email-based one-time password authentication with customizable OTP length and expiration. Includes server-side email sending setup and client methods for sending and verifying OTP codes. Supports both sign-in and verification flows with optional sign-up enforcement.
+
+```typescript
+import { betterAuth } from "better-auth";
+import { emailOTP } from "better-auth/plugins";
+
+export const auth = betterAuth({
+  plugins: [
+    emailOTP({
+      async sendVerificationOTP({ email, otp, type }) {
+        await sendEmail({
+          to: email,
+          subject: type === "sign-in" ? "Sign in code" : "Verification code",
+          html: `Your verification code is: <strong>${otp}</strong>`,
+        });
+      },
+
+      otpLength: 6,
+      expiresIn: 300, // 5 minutes
+      sendOnSignUp: true,
+      disableSignUp: false,
+    }),
+  ],
+});
+
+// Client Usage
+import { emailOTPClient } from "better-auth/client/plugins";
+
+const authClient = createAuthClient({
+  plugins: [emailOTPClient()],
+});
+
+// Send OTP
+await authClient.emailOTP.sendVerificationOtp({
+  email: "user@example.com",
+  type: "sign-in",
+});
+
+// Verify OTP
+const { data, error } = await authClient.emailOTP.verifyEmail({
+  email: "user@example.com",
+  otp: "123456",
+});
+
+if (!error) {
+  console.log("Signed in successfully:", data.user);
+}
+```
+
+--------------------------------
+
+### Sign in with TikTok - TypeScript (client)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/authentication/tiktok.mdx
+
+Performs a TikTok sign-in flow from the client using better-auth's client helper. Depends on better-auth/client and a configured server-side provider; inputs: provider set to "tiktok"; outputs: a data object returned from authClient.signIn.social. Limitations: behavior depends on provider configuration and redirect URLs; TikTok does not provide email addresses, so user identity may rely on username.
+
+```typescript
+import { createAuthClient } from "better-auth/client"
+const authClient =  createAuthClient()
+
+const signIn = async () => {
+    const data = await authClient.signIn.social({
+        provider: "tiktok"
+    })
+}
+```
+
+--------------------------------
+
+### Configure Trusted Origins with Wildcard Domains (JSON)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/reference/security.mdx
+
+This configuration snippet illustrates how to use wildcard patterns to trust multiple subdomains. It covers both protocol-agnostic wildcards (e.g., `*.example.com`) and protocol-specific wildcards (e.g., `https://*.example.com`), offering flexibility in defining trusted origins for various scenarios.
+
+```json
+{
+  trustedOrigins: [
+    "*.example.com",             // Trust all subdomains of example.com (any protocol)
+    "https://*.example.com",     // Trust only HTTPS subdomains of example.com
+    "http://*.dev.example.com"   // Trust all HTTP subdomains of dev.example.com
+  ]
+}
+```
+
+--------------------------------
+
+### Better Auth Trusted Origins with Multiple or Wildcard IDs
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/guides/browser-extension-guide.mdx
+
+Advanced configuration for Better Auth trusted origins, allowing for multiple specific extension IDs or a wildcard pattern. Using wildcards (`*`) reduces security and is generally recommended only for development and testing environments.
+
+```typescript
+export const auth = betterAuth({
+    trustedOrigins: [
+        // Support a specific extension ID
+        "chrome-extension://YOUR_EXTENSION_ID",
+        
+        // Or support multiple extensions with wildcard (less secure)
+        "chrome-extension://*"
+    ],
+})
+```
+
+--------------------------------
+
+### Configure Better Auth Client Multi-Session Plugin (TypeScript)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/multi-session.mdx
+
+This snippet shows how to integrate the `multiSessionClient` plugin into the client-side `createAuthClient` configuration. This client-side plugin works in conjunction with the server-side multi-session plugin to manage active sessions in the browser. It ensures client-side session logic aligns with the multi-session capabilities.
+
+```ts
+import { createAuthClient } from "better-auth/client"
+import { multiSessionClient } from "better-auth/client/plugins"
+
+export const authClient = createAuthClient({
+    plugins: [
+        multiSessionClient()
+    ]
+})
+```
+
+--------------------------------
+
+### Open customer portal (TypeScript)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/dodopayments.mdx
+
+Shows how to request a customer portal session from the client and redirect the user when a redirect URL is returned. Inputs: authenticated client instance; outputs: redirect to portal URL. Ensure the user is authorized to access the portal if required by server configuration.
+
+```typescript
+const { data: customerPortal, error } = await authClient.dodopayments.customer.portal();
+if (customerPortal && customerPortal.redirect) {
+  window.location.href = customerPortal.url;
+}
+```
+
+--------------------------------
+
+### Handle Payments and Subscriptions with Autumn-js React
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/autumn.mdx
+
+This snippet demonstrates how to use the `attach` function from `useCustomer` to redirect users to a Stripe checkout page for purchasing the Pro plan or confirm an existing payment method for a new subscription. It utilizes the `AttachDialog` component from `autumn-js/react`.
+
+```tsx
+import { useCustomer, AttachDialog } from "autumn-js/react";
+
+export default function PurchaseButton() {
+  const { attach } = useCustomer();
+
+  return (
+    <button
+      onClick={async () => {
+        await attach({
+          productId: "pro",
+          dialog: AttachDialog,
+        });
+      }}
+    >
+      Upgrade to Pro
+    </button>
+  );
+}
+```
+
+--------------------------------
+
+### Configure local environment variables in .env.local
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/integrations/convex.mdx
+
+Adds deployment and public Convex/site URLs to the `.env.local` file for local development. Separate configurations are provided for Convex Cloud and self-hosted deployments.
+
+```shell
+# Deployment used by \`npx convex dev\`
+CONVEX_DEPLOYMENT=dev:adjective-animal-123 # team: team-name, project: project-name
+
+NEXT_PUBLIC_CONVEX_URL=https://adjective-animal-123.convex.cloud
+
+# Same as NEXT_PUBLIC_CONVEX_URL but ends in .site // [!code ++]
+NEXT_PUBLIC_CONVEX_SITE_URL=https://adjective-animal-123.convex.site # [!code ++]
+
+# Your local site URL // [!code ++]
+SITE_URL=http://localhost:3000 # [!code ++]
+```
+
+```shell
+# Deployment used by \`npx convex dev\`
+CONVEX_DEPLOYMENT=dev:adjective-animal-123 # team: team-name, project: project-name
+
+NEXT_PUBLIC_CONVEX_URL=http://127.0.0.1:3210
+
+# Will generally be one number higher than NEXT_PUBLIC_CONVEX_URL,
+# so if your convex url is :3212, your site url will be :3213
+NEXT_PUBLIC_CONVEX_SITE_URL=http://127.0.0.1:3211 # [!code ++]
+
+# Your local site URL // [!code ++]
+SITE_URL=http://localhost:3000 # [!code ++]
+```
+
+--------------------------------
+
+### Install PostgreSQL Client and Types
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/blogs/0-supabase-auth-to-planetscale-migration.mdx
+
+This command installs the `pg` package for PostgreSQL client functionality and its TypeScript type definitions, required for interacting with PostgreSQL databases in a Node.js environment.
+
+```bash
+npm install pg
+npm install --save-dev @types/pg
+```
+
+--------------------------------
+
+### POST /api/check
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/plugins/autumn.mdx
+
+Check if customer is allowed to use a specific feature based on their subscription
+
+```APIDOC
+## POST /api/check
+
+### Description
+Verify customer permissions for feature usage
+
+### Method
+POST
+
+### Endpoint
+/api/check
+
+### Parameters
+#### Request Body
+- **featureId** (string) - Required - The feature identifier to check permissions for
+- **headers** (object) - Required - Request headers containing authentication
+
+### Request Example
+{
+  "featureId": "messages"
+}
+
+### Response
+#### Success Response (200)
+- **allowed** (boolean) - Whether the customer can use the feature
+- **balance** (number) - Remaining balance for the feature
+```
+
+--------------------------------
+
+### Enable Multi-Team organization plugin (TypeScript)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/blogs/1-3.mdx
+
+Registers the organization plugin to support multi-team membership. This is a breaking change: teamId was removed from the member table and a new teamMembers table is required. The snippet includes the server-side auth registration and the client creation using createAuthClient with organizationClient to infer auth types.
+
+```typescript
+export const auth = betterAuth({
+  plugins: [
+    organization({
+      // ...
+    }),
+  ],
+});
+```
+
+```typescript
+import { createAuthClient } from "better-auth/client";
+import { organizationClient } from "better-auth/client/plugins";
+import { auth } from "./auth";
+
+export const authClient = createAuthClient({
+  // pass your auth instance to infer additional fields
+  plugins: [organizationClient({ $inferAuth: {} as typeof auth })], // [!code highlight]
+});
+```
+
+--------------------------------
+
+### Rate Limit Configuration (better-auth)
+
+Source: https://github.com/better-auth/better-auth/blob/canary/docs/content/docs/reference/options.mdx
+
+Configure global and per-path rate limiting, storage backend, and window/max settings for better-auth.
+
+```APIDOC
+## CONFIG /rateLimit
+
+### Description
+Rate limiting configuration for better-auth. Control whether rate limiting is enabled, the window and maximum requests, per-path custom rules, and storage backend.
+
+### Method
+CONFIG
+
+### Endpoint
+/rateLimit
+
+### Parameters
+#### Path Parameters
+- None
+
+#### Query Parameters
+- None
+
+#### Request Body
+- **enabled** (boolean) - Optional - Enable or disable rate limiting. Defaults: true in production and false in development.
+- **window** (number) - Optional - Time window in seconds for rate limiting. Default: 10.
+- **max** (number) - Optional - Default maximum number of requests allowed within the window. Default: 100.
+- **customRules** (object) - Optional - Map of path -> { window, max } for per-path overrides.
+- **storage** (string) - Optional - Storage backend for rate limit counters. Options: "memory", "database", "secondary-storage". Default: "memory".
+- **modelName** (string) - Optional - Table/model name to use when using database storage. Default: "rateLimit".
+
+### Request Example
+{
+  "rateLimit": {
+    "enabled": true,
+    "window": 10,
+    "max": 100,
+    "customRules": {
+      "/example/path": { "window": 10, "max": 100 }
+    },
+    "storage": "memory",
+    "modelName": "rateLimit"
+  }
+}
+
+### Response
+#### Success Response (200)
+- **rateLimit** (object) - The resolved rate limit configuration.
+
+#### Response Example
+{
+  "rateLimit": {
+    "enabled": true,
+    "window": 10,
+    "max": 100,
+    "storage": "memory"
+  }
+}
+
+```

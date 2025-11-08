@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-This guide helps agents contribute to AskMyMoney's ChatGPT-ready Next.js repo confidently and consistently.
+This guide helps agents contribute to AskMyMoney's ChatGPT-ready Next.js repo confidently and consistently. Review the resources in `llm_context/`—Apps SDK docs/examples live under `llm_context/appssdk/`, Better Auth plugins live under `llm_context/betterauth/`, and the empty `llm_context/mcp/` folder is reserved for MCP-specific notes you might add—to fully understand how the Apps SDK and MCP integrations work with this project.
 
 ## Project Structure & Module Organization
 - `app/` holds Next.js routes; `app/mcp/route.ts` exposes MCP tools/resources consumed by ChatGPT.

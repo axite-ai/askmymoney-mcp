@@ -1,0 +1,2373 @@
+Repository: openai/openai-apps-sdk-examples
+Files analyzed: 54
+
+Estimated tokens: 153.8k
+
+Directory structure:
+└── openai-openai-apps-sdk-examples/
+    ├── README.md
+    ├── build-all.mts
+    ├── dev-all.mts
+    ├── LICENSE
+    ├── package.json
+    ├── pnpm-lock.yaml
+    ├── pnpm-workspace.yaml
+    ├── tailwind.config.ts
+    ├── tsconfig.app.json
+    ├── tsconfig.json
+    ├── tsconfig.node.json
+    ├── vite-env.d.ts
+    ├── vite.config.mts
+    ├── vite.host.config.mts
+    ├── .pre-commit-config.yaml
+    ├── pizzaz_server_node/
+    │   ├── README.md
+    │   ├── package.json
+    │   ├── tsconfig.json
+    │   └── src/
+    │       └── server.ts
+    ├── pizzaz_server_python/
+    │   ├── README.md
+    │   ├── main.py
+    │   └── requirements.txt
+    ├── solar-system_server_python/
+    │   ├── README.md
+    │   ├── main.py
+    │   └── requirements.txt
+    ├── src/
+    │   ├── index.css
+    │   ├── media-queries.ts
+    │   ├── types.ts
+    │   ├── use-display-mode.ts
+    │   ├── use-max-height.ts
+    │   ├── use-openai-global.ts
+    │   ├── use-widget-props.ts
+    │   ├── use-widget-state.ts
+    │   ├── pizzaz/
+    │   │   ├── index.jsx
+    │   │   ├── Inspector.jsx
+    │   │   ├── map.css
+    │   │   ├── markers.json
+    │   │   └── Sidebar.jsx
+    │   ├── pizzaz-albums/
+    │   │   ├── AlbumCard.jsx
+    │   │   ├── albums.json
+    │   │   ├── FilmStrip.jsx
+    │   │   ├── FullscreenViewer.jsx
+    │   │   └── index.jsx
+    │   ├── pizzaz-carousel/
+    │   │   ├── index.jsx
+    │   │   └── PlaceCard.jsx
+    │   ├── pizzaz-list/
+    │   │   └── index.jsx
+    │   ├── pizzaz-shop/
+    │   │   └── index.tsx
+    │   ├── solar-system/
+    │   │   ├── index.jsx
+    │   │   └── solar-system.jsx
+    │   ├── todo/
+    │   │   ├── index.jsx
+    │   │   ├── todo.css
+    │   │   └── todo.jsx
+    │   └── utils/
+    │       └── locale.ts
+    └── .github/
+        └── workflows/
+            └── pre-commit.yml
+
+
+================================================
+FILE: README.md
+================================================
+# Apps SDK Examples Gallery
+
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+This repository showcases example UI components to be used with the Apps SDK, as well as example MCP servers that expose a collection of components as tools.
+It is meant to be used as a starting point and source of inspiration to build your own apps for ChatGPT.
+
+Note: If you are on Chrome and have recently updated to version 142, you will need to disable the [`local-network-access` flag](https://developer.chrome.com/release-notes/142#local_network_access_restrictions) to see the widget UI.
+
+How to disable it:
+
+1. Go to chrome://flags/
+2. Find #local-network-access-check
+3. Set it to Disabled
+
+
+## MCP + Apps SDK overview
+
+The Model Context Protocol (MCP) is an open specification for connecting large language model clients to external tools, data, and user interfaces. An MCP server exposes tools that a model can call during a conversation and returns results according to the tool contracts. Those results can include extra metadata—such as inline HTML—that the Apps SDK uses to render rich UI components (widgets) alongside assistant messages.
+
+Within the Apps SDK, MCP keeps the server, model, and UI in sync. By standardizing the wire format, authentication, and metadata, it lets ChatGPT reason about your connector the same way it reasons about built-in tools. A minimal MCP integration for Apps SDK implements three capabilities:
+
+1. **List tools** – Your server advertises the tools it supports, including their JSON Schema input/output contracts and optional annotations (for example, `readOnlyHint`).
+2. **Call tools** – When a model selects a tool, it issues a `call_tool` request with arguments that match the user intent. Your server executes the action and returns structured content the model can parse.
+3. **Return widgets** – Alongside structured content, return embedded resources in the response metadata so the Apps SDK can render the interface inline in the Apps SDK client (ChatGPT).
+
+Because the protocol is transport agnostic, you can host the server over Server-Sent Events or streaming HTTP—Apps SDK supports both.
+
+The MCP servers in this demo highlight how each tool can light up widgets by combining structured payloads with `_meta.openai/outputTemplate` metadata returned from the MCP servers.
+
+## Repository structure
+
+- `src/` – Source for each widget example.
+- `assets/` – Generated HTML, JS, and CSS bundles after running the build step.
+- `pizzaz_server_node/` – MCP server implemented with the official TypeScript SDK.
+- `pizzaz_server_python/` – Python MCP server that returns the Pizzaz widgets.
+- `solar-system_server_python/` – Python MCP server for the 3D solar system widget.
+- `build-all.mts` – Vite build orchestrator that produces hashed bundles for every widget entrypoint.
+
+## Prerequisites
+
+- Node.js 18+
+- pnpm (recommended) or npm/yarn
+- Python 3.10+ (for the Python MCP server)
+- pre-commit for formatting
+
+## Install dependencies
+
+Clone the repository and install the workspace dependencies:
+
+```bash
+pnpm install
+pre-commit install
+```
+
+> Using npm or yarn? Install the root dependencies with your preferred client and adjust the commands below accordingly.
+
+## Build the components gallery
+
+The components are bundled into standalone assets that the MCP servers serve as reusable UI resources.
+
+```bash
+pnpm run build
+```
+
+This command runs `build-all.mts`, producing versioned `.html`, `.js`, and `.css` files inside `assets/`. Each widget is wrapped with the CSS it needs so you can host the bundles directly or ship them with your own server.
+
+To iterate on your components locally, you can also launch the Vite dev server:
+
+```bash
+pnpm run dev
+```
+
+## Serve the static assets
+
+All of the MCP servers expect the bundled HTML, JS, and CSS to be served from the local static file server. After every build, start the server before launching any MCP processes:
+
+```bash
+pnpm run serve
+```
+
+The assets are exposed at [`http://localhost:4444`](http://localhost:4444) with CORS enabled so that local tooling (including MCP inspectors) can fetch them.
+
+> **Note:** The Python Pizzaz server caches widget HTML with `functools.lru_cache`. If you rebuild or manually edit files in `assets/`, restart the MCP server so it picks up the updated markup.
+
+## Run the MCP servers
+
+The repository ships several demo MCP servers that highlight different widget bundles:
+
+- **Pizzaz (Node & Python)** – pizza-inspired collection of tools and components
+- **Solar system (Python)** – 3D solar system viewer
+
+### Pizzaz Node server
+
+```bash
+cd pizzaz_server_node
+pnpm start
+```
+
+### Pizzaz Python server
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r pizzaz_server_python/requirements.txt
+uvicorn pizzaz_server_python.main:app --port 8000
+```
+
+### Solar system Python server
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r solar-system_server_python/requirements.txt
+uvicorn solar-system_server_python.main:app --port 8000
+```
+
+You can reuse the same virtual environment for all Python servers—install the dependencies once and run whichever entry point you need.
+
+## Testing in ChatGPT
+
+To add these apps to ChatGPT, enable [developer mode](https://platform.openai.com/docs/guides/developer-mode), and add your apps in Settings > Connectors.
+
+To add your local server without deploying it, you can use a tool like [ngrok](https://ngrok.com/) to expose your local server to the internet.
+
+For example, once your mcp servers are running, you can run:
+
+```bash
+ngrok http 8000
+```
+
+You will get a public URL that you can use to add your local server to ChatGPT in Settings > Connectors.
+
+For example: `https://<custom_endpoint>.ngrok-free.app/mcp`
+
+Once you add a connector, you can use it in ChatGPT conversations.
+
+You can add your app to the conversation context by selecting it in the "More" options.
+
+![more-chatgpt](https://github.com/user-attachments/assets/26852b36-7f9e-4f48-a515-aebd87173399)
+
+You can then invoke tools by asking something related. For example, for the Pizzaz app, you can ask "What are the best pizzas in town?".
+
+## Next steps
+
+- Customize the widget data: edit the handlers in `pizzaz_server_node/src`, `pizzaz_server_python/main.py`, or the solar system server to fetch data from your systems.
+- Create your own components and add them to the gallery: drop new entries into `src/` and they will be picked up automatically by the build script.
+
+### Deploy your MCP server
+
+You can use the cloud environment of your choice to deploy your MCP server.
+
+Include this in the environment variables:
+
+```
+BASE_URL=https://your-server.com
+```
+
+This will be used to generate the HTML for the widgets so that they can serve static assets from this hosted url.
+
+## Contributing
+
+You are welcome to open issues or submit PRs to improve this app, however, please note that we may not review all suggestions.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
+
+================================================
+FILE: pizzaz_server_node/src/server.ts
+================================================
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { URL, fileURLToPath } from "node:url";
+
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import {
+  CallToolRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ListResourcesRequestSchema,
+  ListToolsRequestSchema,
+  ReadResourceRequestSchema,
+  type CallToolRequest,
+  type ListResourceTemplatesRequest,
+  type ListResourcesRequest,
+  type ListToolsRequest,
+  type ReadResourceRequest,
+  type Resource,
+  type ResourceTemplate,
+  type Tool,
+} from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
+
+type PizzazWidget = {
+  id: string;
+  title: string;
+  templateUri: string;
+  invoking: string;
+  invoked: string;
+  html: string;
+  responseText: string;
+};
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT_DIR = path.resolve(__dirname, "..", "..");
+const ASSETS_DIR = path.resolve(ROOT_DIR, "assets");
+
+function readWidgetHtml(componentName: string): string {
+  if (!fs.existsSync(ASSETS_DIR)) {
+    throw new Error(
+      `Widget assets not found. Expected directory ${ASSETS_DIR}. Run "pnpm run build" before starting the server.`
+    );
+  }
+
+  const directPath = path.join(ASSETS_DIR, `${componentName}.html`);
+  let htmlContents: string | null = null;
+
+  if (fs.existsSync(directPath)) {
+    htmlContents = fs.readFileSync(directPath, "utf8");
+  } else {
+    const candidates = fs
+      .readdirSync(ASSETS_DIR)
+      .filter(
+        (file) => file.startsWith(`${componentName}-`) && file.endsWith(".html")
+      )
+      .sort();
+    const fallback = candidates[candidates.length - 1];
+    if (fallback) {
+      htmlContents = fs.readFileSync(path.join(ASSETS_DIR, fallback), "utf8");
+    }
+  }
+
+  if (!htmlContents) {
+    throw new Error(
+      `Widget HTML for "${componentName}" not found in ${ASSETS_DIR}. Run "pnpm run build" to generate the assets.`
+    );
+  }
+
+  return htmlContents;
+}
+
+function widgetDescriptorMeta(widget: PizzazWidget) {
+  return {
+    "openai/outputTemplate": widget.templateUri,
+    "openai/toolInvocation/invoking": widget.invoking,
+    "openai/toolInvocation/invoked": widget.invoked,
+    "openai/widgetAccessible": true,
+    "openai/resultCanProduceWidget": true,
+  } as const;
+}
+
+function widgetInvocationMeta(widget: PizzazWidget) {
+  return {
+    "openai/toolInvocation/invoking": widget.invoking,
+    "openai/toolInvocation/invoked": widget.invoked,
+  } as const;
+}
+
+const widgets: PizzazWidget[] = [
+  {
+    id: "pizza-map",
+    title: "Show Pizza Map",
+    templateUri: "ui://widget/pizza-map.html",
+    invoking: "Hand-tossing a map",
+    invoked: "Served a fresh map",
+    html: readWidgetHtml("pizzaz"),
+    responseText: "Rendered a pizza map!",
+  },
+  {
+    id: "pizza-carousel",
+    title: "Show Pizza Carousel",
+    templateUri: "ui://widget/pizza-carousel.html",
+    invoking: "Carousel some spots",
+    invoked: "Served a fresh carousel",
+    html: readWidgetHtml("pizzaz-carousel"),
+    responseText: "Rendered a pizza carousel!",
+  },
+  {
+    id: "pizza-albums",
+    title: "Show Pizza Album",
+    templateUri: "ui://widget/pizza-albums.html",
+    invoking: "Hand-tossing an album",
+    invoked: "Served a fresh album",
+    html: readWidgetHtml("pizzaz-albums"),
+    responseText: "Rendered a pizza album!",
+  },
+  {
+    id: "pizza-list",
+    title: "Show Pizza List",
+    templateUri: "ui://widget/pizza-list.html",
+    invoking: "Hand-tossing a list",
+    invoked: "Served a fresh list",
+    html: readWidgetHtml("pizzaz-list"),
+    responseText: "Rendered a pizza list!",
+  },
+  {
+    id: "pizza-shop",
+    title: "Open Pizzaz Shop",
+    templateUri: "ui://widget/pizza-shop.html",
+    invoking: "Opening the shop",
+    invoked: "Shop opened",
+    html: readWidgetHtml("pizzaz-shop"),
+    responseText: "Rendered the Pizzaz shop!",
+  },
+];
+
+const widgetsById = new Map<string, PizzazWidget>();
+const widgetsByUri = new Map<string, PizzazWidget>();
+
+widgets.forEach((widget) => {
+  widgetsById.set(widget.id, widget);
+  widgetsByUri.set(widget.templateUri, widget);
+});
+
+const toolInputSchema = {
+  type: "object",
+  properties: {
+    pizzaTopping: {
+      type: "string",
+      description: "Topping to mention when rendering the widget.",
+    },
+  },
+  required: ["pizzaTopping"],
+  additionalProperties: false,
+} as const;
+
+const toolInputParser = z.object({
+  pizzaTopping: z.string(),
+});
+
+const tools: Tool[] = widgets.map((widget) => ({
+  name: widget.id,
+  description: widget.title,
+  inputSchema: toolInputSchema,
+  title: widget.title,
+  _meta: widgetDescriptorMeta(widget),
+  // To disable the approval prompt for the widgets
+  annotations: {
+    destructiveHint: false,
+    openWorldHint: false,
+    readOnlyHint: true,
+  },
+}));
+
+const resources: Resource[] = widgets.map((widget) => ({
+  uri: widget.templateUri,
+  name: widget.title,
+  description: `${widget.title} widget markup`,
+  mimeType: "text/html+skybridge",
+  _meta: widgetDescriptorMeta(widget),
+}));
+
+const resourceTemplates: ResourceTemplate[] = widgets.map((widget) => ({
+  uriTemplate: widget.templateUri,
+  name: widget.title,
+  description: `${widget.title} widget markup`,
+  mimeType: "text/html+skybridge",
+  _meta: widgetDescriptorMeta(widget),
+}));
+
+function createPizzazServer(): Server {
+  const server = new Server(
+    {
+      name: "pizzaz-node",
+      version: "0.1.0",
+    },
+    {
+      capabilities: {
+        resources: {},
+        tools: {},
+      },
+    }
+  );
+
+  server.setRequestHandler(
+    ListResourcesRequestSchema,
+    async (_request: ListResourcesRequest) => ({
+      resources,
+    })
+  );
+
+  server.setRequestHandler(
+    ReadResourceRequestSchema,
+    async (request: ReadResourceRequest) => {
+      const widget = widgetsByUri.get(request.params.uri);
+
+      if (!widget) {
+        throw new Error(`Unknown resource: ${request.params.uri}`);
+      }
+
+      return {
+        contents: [
+          {
+            uri: widget.templateUri,
+            mimeType: "text/html+skybridge",
+            text: widget.html,
+            _meta: widgetDescriptorMeta(widget),
+          },
+        ],
+      };
+    }
+  );
+
+  server.setRequestHandler(
+    ListResourceTemplatesRequestSchema,
+    async (_request: ListResourceTemplatesRequest) => ({
+      resourceTemplates,
+    })
+  );
+
+  server.setRequestHandler(
+    ListToolsRequestSchema,
+    async (_request: ListToolsRequest) => ({
+      tools,
+    })
+  );
+
+  server.setRequestHandler(
+    CallToolRequestSchema,
+    async (request: CallToolRequest) => {
+      const widget = widgetsById.get(request.params.name);
+
+      if (!widget) {
+        throw new Error(`Unknown tool: ${request.params.name}`);
+      }
+
+      const args = toolInputParser.parse(request.params.arguments ?? {});
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: widget.responseText,
+          },
+        ],
+        structuredContent: {
+          pizzaTopping: args.pizzaTopping,
+        },
+        _meta: widgetInvocationMeta(widget),
+      };
+    }
+  );
+
+  return server;
+}
+
+type SessionRecord = {
+  server: Server;
+  transport: SSEServerTransport;
+};
+
+const sessions = new Map<string, SessionRecord>();
+
+const ssePath = "/mcp";
+const postPath = "/mcp/messages";
+
+async function handleSseRequest(res: ServerResponse) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  const server = createPizzazServer();
+  const transport = new SSEServerTransport(postPath, res);
+  const sessionId = transport.sessionId;
+
+  sessions.set(sessionId, { server, transport });
+
+  transport.onclose = async () => {
+    sessions.delete(sessionId);
+    await server.close();
+  };
+
+  transport.onerror = (error) => {
+    console.error("SSE transport error", error);
+  };
+
+  try {
+    await server.connect(transport);
+  } catch (error) {
+    sessions.delete(sessionId);
+    console.error("Failed to start SSE session", error);
+    if (!res.headersSent) {
+      res.writeHead(500).end("Failed to establish SSE connection");
+    }
+  }
+}
+
+async function handlePostMessage(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL
+) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "content-type");
+  const sessionId = url.searchParams.get("sessionId");
+
+  if (!sessionId) {
+    res.writeHead(400).end("Missing sessionId query parameter");
+    return;
+  }
+
+  const session = sessions.get(sessionId);
+
+  if (!session) {
+    res.writeHead(404).end("Unknown session");
+    return;
+  }
+
+  try {
+    await session.transport.handlePostMessage(req, res);
+  } catch (error) {
+    console.error("Failed to process message", error);
+    if (!res.headersSent) {
+      res.writeHead(500).end("Failed to process message");
+    }
+  }
+}
+
+const portEnv = Number(process.env.PORT ?? 8000);
+const port = Number.isFinite(portEnv) ? portEnv : 8000;
+
+const httpServer = createServer(
+  async (req: IncomingMessage, res: ServerResponse) => {
+    if (!req.url) {
+      res.writeHead(400).end("Missing URL");
+      return;
+    }
+
+    const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+
+    if (
+      req.method === "OPTIONS" &&
+      (url.pathname === ssePath || url.pathname === postPath)
+    ) {
+      res.writeHead(204, {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "content-type",
+      });
+      res.end();
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === ssePath) {
+      await handleSseRequest(res);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === postPath) {
+      await handlePostMessage(req, res, url);
+      return;
+    }
+
+    res.writeHead(404).end("Not Found");
+  }
+);
+
+httpServer.on("clientError", (err: Error, socket) => {
+  console.error("HTTP client error", err);
+  socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
+});
+
+httpServer.listen(port, () => {
+  console.log(`Pizzaz MCP server listening on http://localhost:${port}`);
+  console.log(`  SSE stream: GET http://localhost:${port}${ssePath}`);
+  console.log(
+    `  Message post endpoint: POST http://localhost:${port}${postPath}?sessionId=...`
+  );
+});
+
+
+
+
+
+================================================
+FILE: src/pizzaz/index.jsx
+================================================
+import React, { useEffect, useRef, useState } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
+import { createRoot } from "react-dom/client";
+import markers from "./markers.json";
+import { AnimatePresence } from "framer-motion";
+import Inspector from "./Inspector";
+import Sidebar from "./Sidebar";
+import { useOpenAiGlobal } from "../use-openai-global";
+import { useMaxHeight } from "../use-max-height";
+import { Maximize2 } from "lucide-react";
+import {
+  useNavigate,
+  useLocation,
+  Routes,
+  Route,
+  BrowserRouter,
+  Outlet,
+} from "react-router-dom";
+
+mapboxgl.accessToken =
+  "pk.eyJ1IjoiZXJpY25pbmciLCJhIjoiY21icXlubWM1MDRiczJvb2xwM2p0amNyayJ9.n-3O6JI5nOp_Lw96ZO5vJQ";
+
+function fitMapToMarkers(map, coords) {
+  if (!map || !coords.length) return;
+  if (coords.length === 1) {
+    map.flyTo({ center: coords[0], zoom: 12 });
+    return;
+  }
+  const bounds = coords.reduce(
+    (b, c) => b.extend(c),
+    new mapboxgl.LngLatBounds(coords[0], coords[0])
+  );
+  map.fitBounds(bounds, { padding: 60, animate: true });
+}
+
+export default function App() {
+  const mapRef = useRef(null);
+  const mapObj = useRef(null);
+  const markerObjs = useRef([]);
+  const places = markers?.places || [];
+  const markerCoords = places.map((p) => p.coords);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const selectedId = React.useMemo(() => {
+    const match = location?.pathname?.match(/(?:^|\/)place\/([^/]+)/);
+    return match && match[1] ? match[1] : null;
+  }, [location?.pathname]);
+  const selectedPlace = places.find((p) => p.id === selectedId) || null;
+  const [viewState, setViewState] = useState(() => ({
+    center: markerCoords.length > 0 ? markerCoords[0] : [0, 0],
+    zoom: markerCoords.length > 0 ? 12 : 2,
+  }));
+  const displayMode = useOpenAiGlobal("displayMode");
+  const allowInspector = displayMode === "fullscreen";
+  const maxHeight = useMaxHeight() ?? undefined;
+
+  useEffect(() => {
+    if (mapObj.current) return;
+    mapObj.current = new mapboxgl.Map({
+      container: mapRef.current,
+      style: "mapbox://styles/mapbox/streets-v12",
+      center: markerCoords.length > 0 ? markerCoords[0] : [0, 0],
+      zoom: markerCoords.length > 0 ? 12 : 2,
+      attributionControl: false,
+    });
+    addAllMarkers(places);
+    setTimeout(() => {
+      fitMapToMarkers(mapObj.current, markerCoords);
+    }, 0);
+    // after first paint
+    requestAnimationFrame(() => mapObj.current.resize());
+
+    // or keep it in sync with window resizes
+    window.addEventListener("resize", mapObj.current.resize);
+
+    return () => {
+      window.removeEventListener("resize", mapObj.current.resize);
+      mapObj.current.remove();
+    };
+    // eslint-disable-next-line
+  }, []);
+
+  useEffect(() => {
+    if (!mapObj.current) return;
+    const handler = () => {
+      const c = mapObj.current.getCenter();
+      setViewState({ center: [c.lng, c.lat], zoom: mapObj.current.getZoom() });
+    };
+    mapObj.current.on("moveend", handler);
+    return () => {
+      mapObj.current.off("moveend", handler);
+    };
+  }, []);
+
+  function addAllMarkers(placesList) {
+    markerObjs.current.forEach((m) => m.remove());
+    markerObjs.current = [];
+    placesList.forEach((place) => {
+      const marker = new mapboxgl.Marker({
+        color: "#F46C21",
+      })
+        .setLngLat(place.coords)
+        .addTo(mapObj.current);
+      const el = marker.getElement();
+      if (el) {
+        el.style.cursor = "pointer";
+        el.addEventListener("click", () => {
+          navigate(`/place/${place.id}`);
+          panTo(place.coords, { offsetForInspector: true });
+        });
+      }
+      markerObjs.current.push(marker);
+    });
+  }
+
+  function getInspectorOffsetPx() {
+    if (displayMode !== "fullscreen") return 0;
+    if (typeof window === "undefined") return 0;
+    const isXlUp =
+      window.matchMedia && window.matchMedia("(min-width: 1280px)").matches;
+    const el = document.querySelector(".pizzaz-inspector");
+    const w = el ? el.getBoundingClientRect().width : 360;
+    const half = Math.round(w / 2);
+    // xl: inspector on right → negative x offset; lg: inspector on left → positive x offset
+    return isXlUp ? -half : half;
+  }
+
+  function panTo(
+    coord,
+    { offsetForInspector } = { offsetForInspector: false }
+  ) {
+    if (!mapObj.current) return;
+    const inspectorOffset = offsetForInspector ? getInspectorOffsetPx() : 0;
+    const flyOpts = {
+      center: coord,
+      zoom: 14,
+      speed: 1.2,
+      curve: 1.6,
+    };
+    if (inspectorOffset) {
+      flyOpts.offset = [inspectorOffset, 0];
+    }
+    mapObj.current.flyTo(flyOpts);
+  }
+
+  useEffect(() => {
+    if (!mapObj.current) return;
+    addAllMarkers(places);
+  }, [places]);
+
+  // Pan the map when the selected place changes via routing
+  useEffect(() => {
+    if (!mapObj.current || !selectedPlace) return;
+    panTo(selectedPlace.coords, { offsetForInspector: true });
+  }, [selectedId]);
+
+  // Ensure Mapbox resizes when container maxHeight/display mode changes
+  useEffect(() => {
+    if (!mapObj.current) return;
+    mapObj.current.resize();
+  }, [maxHeight, displayMode]);
+
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.oai &&
+      typeof window.oai.widget.setState === "function"
+    ) {
+      window.oai.widget.setState({
+        center: viewState.center,
+        zoom: viewState.zoom,
+        markers: markerCoords,
+      });
+    }
+  }, [viewState, markerCoords]);
+
+  return (
+    <>
+      <div
+        style={{
+          maxHeight,
+          height: displayMode === "fullscreen" ? maxHeight - 40 : 480,
+        }}
+        className={
+          "relative antialiased w-full min-h-[480px] overflow-hidden " +
+          (displayMode === "fullscreen"
+            ? "rounded-none border-0"
+            : "border border-black/10 dark:border-white/10 rounded-2xl sm:rounded-3xl")
+        }
+      >
+        <Outlet />
+        {displayMode !== "fullscreen" && (
+          <button
+            aria-label="Enter fullscreen"
+            className="absolute top-4 right-4 z-30 rounded-full bg-white text-black shadow-lg ring ring-black/5 p-2.5 pointer-events-auto"
+            onClick={() => {
+              if (selectedId) {
+                navigate("..", { replace: true });
+              }
+              if (window?.webplus?.requestDisplayMode) {
+                window.webplus.requestDisplayMode({ mode: "fullscreen" });
+              }
+            }}
+          >
+            <Maximize2
+              strokeWidth={1.5}
+              className="h-4.5 w-4.5"
+              aria-hidden="true"
+            />
+          </button>
+        )}
+        {/* Sidebar */}
+        <Sidebar
+          places={places}
+          selectedId={selectedId}
+          onSelect={(place) => {
+            navigate(`/place/${place.id}`);
+            panTo(place.coords, { offsetForInspector: true });
+          }}
+        />
+
+        {/* Inspector (right) */}
+        <AnimatePresence>
+          {allowInspector && selectedPlace && (
+            <Inspector
+              key={selectedPlace.id}
+              place={selectedPlace}
+              onClose={() => navigate("..")}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Map */}
+        <div
+          className={
+            "absolute inset-0 overflow-hidden" +
+            (displayMode === "fullscreen"
+              ? " left-[340px] right-2 top-2 bottom-4 border border-black/10 rounded-3xl"
+              : "")
+          }
+        >
+          <div
+            ref={mapRef}
+            className="w-full h-full absolute bottom-0 left-0 right-0"
+            style={{
+              maxHeight,
+              height: displayMode === "fullscreen" ? maxHeight : undefined,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Suggestion chips (bottom, fullscreen) */}
+      {displayMode === "fullscreen" && (
+        <div className="hidden antialiased md:flex absolute inset-x-0 bottom-2 z-30 justify-center pointer-events-none">
+          <div className="flex gap-3 pointer-events-auto">
+            {["Open now", "Top rated", "Vegetarian friendly"].map((label) => (
+              <button
+                key={label}
+                className="rounded-full font-base bg-white ring ring-black/10 text-black px-4 py-1.5 text-sm hover:bg-[#f7f7f7] cursor-pointer"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function RouterRoot() {
+  return (
+    <Routes>
+      <Route path="*" element={<App />}>
+        <Route path="place/:placeId" element={<></>} />
+      </Route>
+    </Routes>
+  );
+}
+
+createRoot(document.getElementById("pizzaz-root")).render(
+  <BrowserRouter>
+    <RouterRoot />
+  </BrowserRouter>
+);
+================================================
+FILE: src/solar-system/solar-system.jsx
+================================================
+import { createRoot } from "react-dom/client";
+import { useRef, useImperativeHandle, useState, useEffect } from "react";
+import { Canvas, useFrame, useThree, useLoader } from "@react-three/fiber";
+import { Html, OrbitControls } from "@react-three/drei";
+import * as THREE from "three";
+import { useSpring } from "@react-spring/three";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  EffectComposer,
+  Bloom,
+  DepthOfField,
+} from "@react-three/postprocessing";
+import { useWidgetProps } from "../use-widget-props";
+import { useMaxHeight } from "../use-max-height";
+import { useDisplayMode } from "../use-display-mode";
+import {
+  useNavigate,
+  useParams,
+  Routes,
+  Route,
+  BrowserRouter,
+} from "react-router-dom";
+
+const ExpandIcon = () => {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M4.33496 11C4.33496 10.6327 4.63273 10.335 5 10.335C5.36727 10.335 5.66504 10.6327 5.66504 11V14.335H9L9.13379 14.3486C9.43692 14.4106 9.66504 14.6786 9.66504 15C9.66504 15.3214 9.43692 15.5894 9.13379 15.6514L9 15.665H5C4.63273 15.665 4.33496 15.3673 4.33496 15V11ZM14.335 9V5.66504H11C10.6327 5.66504 10.335 5.36727 10.335 5C10.335 4.63273 10.6327 4.33496 11 4.33496H15L15.1338 4.34863C15.4369 4.41057 15.665 4.67857 15.665 5V9C15.665 9.36727 15.3673 9.66504 15 9.66504C14.6327 9.66504 14.335 9.36727 14.335 9Z" />
+    </svg>
+  );
+};
+
+/* -------------------------------- util text streaming (unchanged) ------------------------------- */
+function StreamWord({ children, index, delay }) {
+  const [isComplete, setIsComplete] = useState(false);
+  return isComplete ? (
+    <>{children}</>
+  ) : (
+    <motion.span
+      key={index}
+      initial={{ opacity: 0, color: "rgba(0,168,255,1)" }}
+      animate={{ opacity: 1, color: "rgba(255,255,255,1)" }}
+      transition={{
+        type: "spring",
+        bounce: 0,
+        delay: index * 0.015 + 0.14 + (delay || 0),
+        duration: 1,
+      }}
+      onAnimationComplete={() => setIsComplete(true)}
+    >
+      {children}
+    </motion.span>
+  );
+}
+
+function StreamText({ children, delay }) {
+  const words = children.split(" ");
+  return (
+    <>
+      {words.map((word, index) => (
+        <StreamWord index={index} delay={delay} key={index}>
+          {word}{" "}
+        </StreamWord>
+      ))}
+    </>
+  );
+}
+
+/* -------------------------------- background stars ------------------------------- */
+function SceneBackground() {
+  const { scene } = useThree();
+  const texture = useLoader(
+    THREE.TextureLoader,
+    "https://persistent.oaistatic.com/ecosys/stars_8k.webp"
+  );
+  useEffect(() => {
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    scene.background = texture;
+  }, [texture, scene]);
+  return null;
+}
+
+/* -------------------------------- post‑processing ------------------------------- */
+function Effects({ focusTarget, hasFocus }) {
+  const { camera } = useThree();
+  const depthOfFieldRef = useRef();
+
+  useFrame(() => {
+    if (!depthOfFieldRef.current) return;
+
+    if (!hasFocus) {
+      depthOfFieldRef.current.bokehScale = 0; // no planet in focus → no blur
+      return;
+    }
+
+    const d = camera.position.distanceTo(focusTarget); // closer ⇒ stronger blur
+    const scale = THREE.MathUtils.clamp(12 - d * 0.75, 0, 12);
+    depthOfFieldRef.current.bokehScale = scale;
+  });
+
+  return (
+    <EffectComposer>
+      <DepthOfField
+        ref={depthOfFieldRef}
+        focusDistance={0}
+        focalLength={0.02}
+        height={480}
+        bokehScale={0} // initial value; updated each frame
+        target={focusTarget}
+      />
+      <Bloom
+        luminanceThreshold={0}
+        luminanceSmoothing={0.25}
+        intensity={1.75}
+        mipmapBlur
+      />
+    </EffectComposer>
+  );
+}
+
+const planets = [
+  {
+    name: "Mercury",
+    radius: 2,
+    size: 0.2,
+    speed: 0.02,
+    physicalSize: 4879,
+    description:
+      "Mercury is the smallest planet in the Solar System and the closest to the Sun. It has a rocky, cratered surface and extreme temperature swings.",
+  },
+  {
+    name: "Venus",
+    radius: 3,
+    size: 0.35,
+    speed: 0.015,
+    physicalSize: 12104,
+    description:
+      "Venus, similar in size to Earth, is cloaked in thick clouds of sulfuric acid with surface temperatures hot enough to melt lead.",
+  },
+  {
+    name: "Earth",
+    radius: 4,
+    size: 0.38,
+    speed: 0.012,
+    physicalSize: 12742,
+    description:
+      "Earth is the only known planet to support life, with liquid water covering 71% of its surface and a protective atmosphere.",
+  },
+  {
+    name: "Mars",
+    radius: 5,
+    size: 0.25,
+    speed: 0.01,
+    physicalSize: 6779,
+    description:
+      "Mars, the Red Planet, shows evidence of ancient rivers and volcanoes and is a prime target in the search for past life.",
+  },
+  {
+    name: "Jupiter",
+    radius: 7,
+    size: 0.85,
+    speed: 0.008,
+    physicalSize: 139820,
+    description:
+      "Jupiter is the largest planet, a gas giant with a Great Red Spot—an enormous storm raging for centuries.",
+  },
+  {
+    name: "Saturn",
+    radius: 9,
+    size: 0.75,
+    speed: 0.006,
+    physicalSize: 116460,
+    description:
+      "Saturn is famous for its stunning ring system composed of billions of ice and rock particles orbiting the planet.",
+  },
+  {
+    name: "Uranus",
+    radius: 11,
+    size: 0.65,
+    speed: 0.0045,
+    physicalSize: 50724,
+    description:
+      "Uranus is an ice giant rotating on its side, giving rise to extreme seasonal variations during its long orbit.",
+  },
+  {
+    name: "Neptune",
+    radius: 13,
+    size: 0.65,
+    speed: 0.0035,
+    physicalSize: 49244,
+    description:
+      "Neptune, the farthest known giant, is a deep‑blue world with supersonic winds and a faint ring system.",
+  },
+];
+
+/* -------------------------------- main solar‑system component ------------------------------- */
+function SolarSystem() {
+  const [isOrbiting, setIsOrbiting] = useState(true);
+  const [targetPlanetPosition, setTargetPlanetPosition] = useState(null);
+  const { planet_name } = useWidgetProps({});
+
+  const navigate = useNavigate();
+  const { planet: planetParam } = useParams();
+
+  const currentPlanet =
+    planets.find((planet) => planet.name === planetParam) ??
+    planets.find((planet) => planet.name === planet_name);
+
+  const [focusTarget, setFocusTarget] = useState(new THREE.Vector3(0, 0, 0));
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.oai &&
+      typeof window.oai.widget.setState === "function"
+    ) {
+      window.oai.widget.setState({
+        isOrbiting,
+        currentPlanet: currentPlanet ? currentPlanet.name : null,
+      });
+    }
+  }, [isOrbiting, currentPlanet]);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      const ref = planetRefs.current[currentPlanet?.name];
+      if (currentPlanet && ref) {
+        const position = ref.getPosition();
+        setIsOrbiting(false);
+        setTargetPlanetPosition(position);
+        setFocusTarget(position);
+      } else {
+        setIsOrbiting(true);
+        setTargetPlanetPosition("initial");
+        setFocusTarget(new THREE.Vector3(0, 0, 0));
+      }
+    });
+  }, [currentPlanet, isReady]);
+
+  const orbitControlsRef = useRef();
+  const initialCameraPosition = useRef(new THREE.Vector3(0, 0, 10));
+  const initialOrbitTarget = useRef(new THREE.Vector3(0, 0, 0));
+  const planetRefs = useRef({});
+
+  const updatePlanet = (planet) => {
+    if (planet?.name) {
+      navigate(`/${planet.name}`, { replace: false });
+    } else {
+      navigate(`/`, { replace: false });
+    }
+  };
+
+  const handlePointerMissed = () => {
+    setIsOrbiting(true);
+    setTargetPlanetPosition("initial");
+    setFocusTarget(new THREE.Vector3(0, 0, 0));
+    updatePlanet(null);
+  };
+
+  const maxHeight = useMaxHeight() ?? undefined;
+  const displayMode = useDisplayMode();
+  return (
+    <div
+      className={`antialiased w-full relative bg-black overflow-hidden ${
+        displayMode !== "fullscreen"
+          ? "aspect-[640/480] sm:aspect-[640/400]"
+          : ""
+      }`}
+      style={{
+        maxHeight,
+        height: displayMode === "fullscreen" ? maxHeight : undefined,
+      }}
+    >
+      {displayMode !== "fullscreen" && (
+        <div className="fixed end-3 z-20 top-3 aspect-square rounded-full p-2 bg-white/20 text-white backdrop-blur-lg">
+          <button
+            onClick={() => {
+              window.webplus.requestDisplayMode({ mode: "fullscreen" });
+            }}
+          >
+            <ExpandIcon />
+          </button>
+        </div>
+      )}
+      <div className="relative w-full h-full z-10">
+        <Canvas
+          camera={{ position: [0, 2, 8], fov: 60 }}
+          onCreated={({ camera }) => {
+            initialCameraPosition.current.copy(camera.position);
+            if (orbitControlsRef.current) {
+              initialOrbitTarget.current.copy(orbitControlsRef.current.target);
+            }
+            setIsReady(true);
+          }}
+          onPointerMissed={handlePointerMissed}
+        >
+          <SceneBackground />
+          <ambientLight intensity={0.135} />
+          <pointLight position={[0, 0, 0]} intensity={18} />
+          <directionalLight position={[0, 0, 0]} intensity={0.7} castShadow />
+          <OrbitControls ref={orbitControlsRef} />
+          <Sun />
+
+          {/* ---------- render planets ---------- */}
+          {planets.map((planet) => (
+            <Planet
+              key={planet.name}
+              ref={(ref) => {
+                planetRefs.current[planet.name] = ref;
+              }}
+              {...planet}
+              isOrbiting={isOrbiting}
+              onPlanetClick={() => {
+                setIsOrbiting(false);
+                updatePlanet(planet);
+              }}
+            />
+          ))}
+
+          <Effects
+            focusTarget={focusTarget}
+            hasFocus={currentPlanet !== null}
+          />
+          <CameraController
+            targetPosition={targetPlanetPosition}
+            orbitControlsRef={orbitControlsRef}
+            setIsOrbiting={setIsOrbiting}
+            initialCameraPosition={initialCameraPosition}
+            initialOrbitTarget={initialOrbitTarget}
+            setFocusTarget={setFocusTarget}
+          />
+        </Canvas>
+      </div>
+
+      {/* ---------- planet info panel ---------- */}
+      <AnimatePresence>
+        {currentPlanet && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ bounce: 0.2, duration: 0.4, type: "spring" }}
+            className="
+    absolute inset-0
+    flex flex-col justify-end items-center text-center
+    pb-4 px-8 sm:p-8
+    bg-gradient-to-t from-black/80 to-black/0
+    md:bg-gradient-to-r md:from-black md:to-black/0
+    md:items-start md:text-left md:justify-start
+    md:w-72
+    rounded-xl text-white pointer-events-none z-10
+  "
+          >
+            <div className="text-4xl font-medium">
+              <StreamText>{currentPlanet.name}</StreamText>
+            </div>
+            <div className="text-sm my-2 font-medium">
+              <StreamWord delay={0.1}>
+                {Intl.NumberFormat("en-US", {
+                  style: "unit",
+                  unit: "kilometer",
+                  unitDisplay: "narrow",
+                }).format(currentPlanet.physicalSize)}
+              </StreamWord>
+            </div>
+            <div className="text-sm my-2">
+              <StreamText delay={0.125}>{currentPlanet.description}</StreamText>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* -------------------------------- sun sphere ------------------------------- */
+function Sun() {
+  return (
+    <mesh>
+      <sphereGeometry args={[1, 32, 32]} />
+      <meshBasicMaterial color="#F6D973" />
+    </mesh>
+  );
+}
+
+/* -------------------------------- saturn ring component ------------------------------- */
+function SaturnRing({ planetSize }) {
+  const texture = useLoader(
+    THREE.TextureLoader,
+    "https://persistent.oaistatic.com/ecosys/saturn_ring.webp"
+  );
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[planetSize * 1.1, planetSize * 2, 64]} />
+      <meshStandardMaterial map={texture} transparent side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+/* -------------------------------- planet component ------------------------------- */
+function Planet({ name, radius, size, speed, isOrbiting, onPlanetClick, ref }) {
+  const SPEED_SCALE = 0.2;
+  const mesh = useRef();
+  const theta = useRef(Math.random() * Math.PI * 2);
+
+  useImperativeHandle(ref, () => ({
+    getPosition: () => mesh.current.position.clone(),
+  }));
+
+  /* texture per planet */
+  const texture = useLoader(
+    THREE.TextureLoader,
+    `https://persistent.oaistatic.com/ecosys/${name.toLowerCase()}_2k.webp`
+  );
+
+  useFrame(() => {
+    if (isOrbiting) {
+      theta.current += speed * SPEED_SCALE;
+      const x = radius * Math.cos(theta.current);
+      const z = radius * Math.sin(theta.current);
+      mesh.current.position.set(x, 0, z);
+    }
+  });
+
+  return (
+    <mesh
+      ref={mesh}
+      onClick={(e) => {
+        e.stopPropagation(); // ← block onPointerMissed
+        onPlanetClick(mesh.current.position.clone());
+      }}
+    >
+      <sphereGeometry args={[size, 32, 32]} />
+      <meshStandardMaterial map={texture} />
+      {name === "Saturn" && <SaturnRing planetSize={size} />}
+    </mesh>
+  );
+}
+
+/* -------------------------------- camera tween controller ------------------------------- */
+/* -------- camera tween controller -------- */
+/* -------- camera tween controller (lerp version) -------- */
+function CameraController({
+  targetPosition,
+  orbitControlsRef,
+  setIsOrbiting,
+  initialCameraPosition,
+  initialOrbitTarget,
+  setFocusTarget,
+}) {
+  const { camera } = useThree();
+
+  // Where the camera/target should ultimately go
+  const targetCamPos = useRef(null);
+  const targetCamFocus = useRef(null);
+
+  // Whenever SolarSystem tells us to move …
+  useEffect(() => {
+    if (!targetPosition) return;
+
+    // “Initial” = zoom‑out reset
+    if (targetPosition === "initial") {
+      targetCamPos.current = initialCameraPosition.current.clone();
+      targetCamFocus.current = initialOrbitTarget.current.clone();
+      setIsOrbiting(true);
+      setFocusTarget(new THREE.Vector3(0, 0, 0));
+    } else {
+      // Offset the camera so it’s not inside the planet
+      const offset = new THREE.Vector3()
+        .subVectors(camera.position, targetPosition)
+        .normalize()
+        .multiplyScalar(2); // distance from surface – tweak to taste
+      targetCamPos.current = targetPosition.clone().add(offset);
+      targetCamFocus.current = targetPosition.clone();
+      setIsOrbiting(false);
+      setFocusTarget(targetCamFocus.current.clone());
+    }
+
+    // Disable user interaction while we animate
+    if (orbitControlsRef.current) orbitControlsRef.current.enabled = false;
+  }, [targetPosition]);
+
+  useFrame(() => {
+    if (!targetCamPos.current || !targetCamFocus.current) return;
+
+    const lerpSpeed = 0.04; // smoother → smaller, snappier → larger
+    camera.position.lerp(targetCamPos.current, lerpSpeed);
+    if (orbitControlsRef.current) {
+      orbitControlsRef.current.target.lerp(targetCamFocus.current, lerpSpeed);
+      orbitControlsRef.current.update();
+    }
+
+    // Stop when we’re basically there
+    if (
+      camera.position.distanceTo(targetCamPos.current) < 0.05 &&
+      orbitControlsRef.current.target.distanceTo(targetCamFocus.current) < 0.05
+    ) {
+      targetCamPos.current = null;
+      targetCamFocus.current = null;
+      if (orbitControlsRef.current) {
+        orbitControlsRef.current.enabled = true; // re‑enable control
+        orbitControlsRef.current.update(); // sync internals
+      }
+    }
+  });
+
+  return null;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/:planet?" element={<SolarSystem />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+================================================
+FILE: src/todo/todo.jsx
+================================================
+import React, { useRef, useState, useEffect, useMemo, forwardRef } from "react";
+import {
+  AnimatePresence,
+  motion,
+  Reorder,
+  useDragControls,
+} from "framer-motion";
+import { List, GripVertical, Plus, Calendar, EllipsisVertical, Trash2 } from "lucide-react";
+
+// NEW: react-datepicker import (drop-in replacement for native date picker)
+import DatePicker from "react-datepicker";
+
+const todoData = window.todoData || [];
+
+/* -------------------------- Inject datepicker CSS -------------------------- */
+/* Keeps look aligned with the app: small font, black/gray, soft border/shadow,
+   and ensures the calendar grid (weeks/days) renders correctly. */
+let __datepickerStylesInjected = false;
+function injectDatepickerStylesOnce() {
+  if (__datepickerStylesInjected) return;
+  __datepickerStylesInjected = true;
+  const css = `
+  .react-datepicker {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+    font-size: 12px;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.10);
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.10);
+    color: rgba(0,0,0,0.85);
+    overflow: hidden;
+    min-width: 232px;
+    transform: translateX(calc(-100% + 32px));
+  }
+    .react-datepicker__aria-live { display: none; }
+  .react-datepicker__month-container { float: none; }
+  .react-datepicker__header {
+    background: #fff;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    padding: 0; /* we'll manage spacing in the custom header */
+    text-align: center;
+  }
+  .react-datepicker__current-month, .react-datepicker-time__header, .react-datepicker-year-header {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(0,0,0,0.75);
+  }
+  .react-datepicker__day-names {
+    display: flex;
+    justify-content: center;
+    gap: 0.2rem;
+    margin: 0.2rem 0 0.1rem 0;
+  }
+  .react-datepicker__day-name, .react-datepicker__day, .react-datepicker__time-name {
+    width: 2rem;
+    line-height: 2rem;
+    text-align: center;
+    margin: 0.1rem;
+    color: rgba(0,0,0,0.70);
+  }
+  .react-datepicker__day-name { color: rgba(0,0,0,0.45); font-weight: 600; }
+  .react-datepicker__month { margin: 0.25rem 0.4rem 0.5rem; }
+  .react-datepicker__week {
+    display: flex;
+    justify-content: center;
+  }
+  .react-datepicker__day:hover {
+    background: rgba(0,0,0,0.06);
+    border-radius: 6px;
+    cursor:pointer;
+  }
+  .react-datepicker__day--selected, .react-datepicker__day--keyboard-selected {
+    background: rgba(0,0,0,0.85);
+    color: #fff;
+    border-radius: 6px;
+  }
+
+  /* Hide default nav buttons entirely (we render our own header). */
+  .react-datepicker__navigation { display: none !important; }
+
+  .react-datepicker__triangle { display: none; } /* no popper arrow */
+
+  /* Popper wrapper — let Popper compute offsets, but keep it non-fixed */
+  .react-datepicker-popper {
+    position: absolute !important;
+    z-index: 70;
+  }
+  `;
+  const style = document.createElement("style");
+  style.setAttribute("data-injected", "react-datepicker-minimal");
+  style.textContent = css;
+  document.head.appendChild(style);
+}
+
+/* Framer-motion wrappers */
+const MotionCard = motion.div;
+const MotionGrip = motion.create(GripVertical);
+const MotionTrash = motion.create(Trash2);
+const MotionList = motion.create(List);
+
+const MAX_CARD_WIDTH_REM = 28;
+const MAX_CARD_HEIGHT_REM = 31;
+const DEFAULT_LIST_TITLE = "Untitled List";
+
+/* --------------------------------- Utils -------------------------------- */
+
+/** Small, fast, stable id generator (no external deps). */
+function uid() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return (
+    (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).toUpperCase()
+  );
+}
+
+/** Format YYYY-MM-DD for compact display (e.g., "Aug 12" or "Aug 12, 2026"). */
+function formatDueDate(d) {
+  if (!d) return "";
+  const parts = d.split("-");
+  if (parts.length !== 3) return "";
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const day = parseInt(parts[2], 10);
+  const dt = new Date(y, (m || 1) - 1, day || 1);
+  const now = new Date();
+  const sameYear = dt.getFullYear() === now.getFullYear();
+  const opts = sameYear
+    ? { month: "short", day: "numeric" }
+    : { month: "short", day: "numeric", year: "numeric" };
+  return dt.toLocaleDateString(undefined, opts);
+}
+
+/** Parse YYYY-MM-DD -> Date (local) */
+function parseYMD(s) {
+  if (!s || typeof s !== "string") return null;
+  const [y, m, d] = s.split("-").map((v) => parseInt(v, 10));
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+/** Date -> YYYY-MM-DD */
+function toYMD(date) {
+  if (!(date instanceof Date) || isNaN(date)) return null;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Clone seed, adding defaults + stable ids. Keeps `isCurrentlyOpen` if present. */
+function buildInitialData() {
+  const addTodoDefaults = (t) => ({
+    id: t.id ?? uid(),
+    isComplete: !!t.isComplete,
+    note: t.note ?? "",
+    title: t.title ?? "",
+    // Store as YYYY-MM-DD string (or null)
+    dueDate: typeof t.dueDate === "string" ? t.dueDate : null,
+  });
+
+  const lists = (todoData || []).map((l) => ({
+    id: l.id ?? uid(),
+    title: l.title ?? "",
+    isCurrentlyOpen: !!l.isCurrentlyOpen,
+    todos: (l.todos ?? []).map(addTodoDefaults),
+  }));
+
+  return { lists };
+}
+
+/** Click outside hook */
+function useClickOutside(ref, handler) {
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (ref.current && !ref.current.contains(event.target)) handler();
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [ref, handler]);
+}
+
+/** Position of a child rect relative to a container rect */
+function getRelativePosition(element, target) {
+  if (!element || !target) throw new Error("Both element and target must be provided");
+  const left = element.left - target.left;
+  const top = element.top - target.top;
+  const width = element.width;
+  const height = element.height;
+  return { left, top, width, height };
+}
+
+/* -------------------------- Circular checkbox --------------------------- */
+function CircleCheckbox({ checked, onToggle, label }) {
+  return (
+    <div
+      role="checkbox"
+      aria-checked={checked}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      className="w-4 h-4 rounded-full border flex items-center justify-center cursor-pointer select-none outline-none border-gray-400 focus-visible:ring-2 focus-visible:ring-black/20"
+      aria-label={label}
+    >
+      <AnimatePresence initial={false}>
+        {checked && (
+          <motion.div
+            key="dot"
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.6, opacity: 0 }}
+            transition={{ type: "spring", bounce: 0.3, duration: 0.28 }}
+            className="rounded-full bg-black w-[11.5px] h-[11.5px]"
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* --------------------------------- BaseCard -------------------------------- */
+function BaseCard({ children }) {
+  return (
+    <MotionCard className="absolute top-0 left-0 w-full h-full bg-gray-50/100 rounded-3xl border border-black/10 shadow-[0px_8px_14px_rgba(0,0,0,0.05)] overflow-hidden">
+      {children}
+    </MotionCard>
+  );
+}
+
+/* ===================== Unified Details Section (stable input) ===================== */
+function DetailsSection({
+  isOpen,
+  item,
+  updateItemById,
+  noteRef,
+  autoFocusNote,
+  onClickInside,
+}) {
+  return (
+    <AnimatePresence initial={false}>
+      {isOpen && (
+        <motion.div
+          key="details"
+          initial={{ height: 0 }}
+          animate={{ height: "auto" }}
+          exit={{ height: 0 }}
+          transition={{ type: "spring", bounce: 0.24, duration: 0.35 }}
+          className="overflow-hidden"
+          layout
+        >
+          <div
+            className="px-8 pb-3.5 pt-0 flex flex-col gap-2 text-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClickInside && onClickInside();
+            }}
+          >
+            <input
+              ref={noteRef}
+              autoFocus={autoFocusNote}
+              value={item.note ?? ""}
+              onChange={(e) => updateItemById(item.id, { note: e.target.value })}
+              placeholder="Add Note"
+              className="-ml-1 w-full bg-transparent outline-none border-0 focus:ring-0 focus-visible:ring-0 text-sm text-black/55 placeholder-black/30"
+            />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/* ============================= Item row ============================= */
+function TodoListItem({
+  item,
+  index,
+  isNew,
+  updateItemById,
+  deleteTodoById,
+}) {
+  const controls = useDragControls();
+  const [isFocused, setIsFocused] = useState(isNew ?? false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [focusTarget, setFocusTarget] = useState(isNew ? "title" : null);
+
+  // Menu state
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // For drag vs click discrimination on the ellipsis
+  const dragStartedRef = useRef(false);
+  const pointerDownPosRef = useRef(null);
+  const POINTER_THRESHOLD = 4; // px movement to consider it a drag
+
+  const containerRef = useRef(null);
+  const titleRef = useRef(null);
+  const noteRef = useRef(null);
+  const menuRef = useRef(null);
+
+  useClickOutside(containerRef, () => {
+    setIsFocused(false);
+    setFocusTarget(null);
+    setMenuOpen(false);
+  });
+  useClickOutside(menuRef, () => setMenuOpen(false));
+
+  /* Programmatic focusing */
+  useEffect(() => {
+    if (!isFocused) return;
+    if (focusTarget === "title" && titleRef.current) titleRef.current.focus();
+    if (focusTarget === "note" && noteRef.current) noteRef.current.focus();
+  }, [isFocused, focusTarget]);
+
+  const hasNote = (item.note ?? "").length > 0;
+  const detailsOpen = isFocused || hasNote;
+
+  /* --------- Date picker (react-datepicker) ---------- */
+  const dateLabel = formatDueDate(item.dueDate);
+  const selectedDate = parseYMD(item.dueDate);
+  const datepickerRef = useRef(null);
+
+  const openReactDatePicker = () => {
+    try {
+      datepickerRef.current?.setOpen(true);
+    } catch {}
+  };
+
+  // Create a unique, per-row portal target right under the calendar button group.
+  const portalId = useMemo(() => `dp-portal-${item.id}`, [item.id]);
+
+  // Invisible input used only as the anchor element for Popper.
+  const HiddenAnchorInput = forwardRef(function HiddenAnchorInput(props, ref) {
+    return (
+      <input
+        {...props}
+        ref={ref}
+        className="absolute top-full left-0 w-[1px] h-[1px] opacity-0 pointer-events-none"
+        aria-hidden
+        tabIndex={-1}
+      />
+    );
+  });
+
+  /* -------------------- Ellipsis handlers -------------------- */
+  const onEllipsisPointerDown = (e) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
+    dragStartedRef.current = false;
+  };
+
+  const onEllipsisPointerMove = (e) => {
+    if (!pointerDownPosRef.current || dragStartedRef.current) return;
+    const dx = e.clientX - pointerDownPosRef.current.x;
+    const dy = e.clientY - pointerDownPosRef.current.y;
+    if (Math.hypot(dx, dy) >= POINTER_THRESHOLD) {
+      dragStartedRef.current = true;
+      setMenuOpen(false);
+      controls.start(e);
+    }
+  };
+
+  const endPointerCycle = (e) => {
+    pointerDownPosRef.current = null;
+    dragStartedRef.current = false;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+  };
+
+  const onEllipsisPointerUp = (e) => {
+    e.stopPropagation();
+    if (!dragStartedRef.current) {
+      setMenuOpen((o) => !o);
+    }
+    endPointerCycle(e);
+  };
+
+  const onEllipsisPointerCancel = (e) => {
+    endPointerCycle(e);
+  };
+
+  /* --------- Custom header for react-datepicker (Prev | Month YYYY | Next) --------- */
+  function monthYearLabel(date) {
+    try {
+      return date?.toLocaleDateString(undefined, { month: "long", year: "numeric" }) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  const renderHeader = ({
+    date,
+    decreaseMonth,
+    increaseMonth,
+    prevMonthButtonDisabled,
+    nextMonthButtonDisabled,
+  }) => {
+    return (
+      <div className="relative flex items-center justify-center px-2 py-2">
+        <button
+          type="button"
+          onClick={decreaseMonth}
+          disabled={prevMonthButtonDisabled}
+          className="absolute left-2 text-[12px] font-medium text-black/70 hover:text-black disabled:opacity-30 disabled:pointer-events-none"
+          aria-label="Previous month"
+        >
+          Prev
+        </button>
+        <div className="text-[12px] font-semibold text-black/75">
+          {monthYearLabel(date)}
+        </div>
+        <button
+          type="button"
+          onClick={increaseMonth}
+          disabled={nextMonthButtonDisabled}
+          className="absolute right-2 text-[12px] font-medium text-black/70 hover:text-black disabled:opacity-30 disabled:pointer-events-none"
+          aria-label="Next month"
+        >
+          Next
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <Reorder.Item
+      value={item.id}
+      id={item.id}
+      key={item.id}
+      ref={containerRef}
+      as="div"
+      dragListener={false}
+      dragControls={controls}
+      className="relative"
+      layout="position"
+      initial={false}
+    >
+      <motion.div
+        layout
+        initial={isNew ? { opacity: 0, y: 18, scale: 0.98 } : false}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, filter: "blur(4px)", scale: 0.98 }}
+        transition={{ type: "spring", bounce: 0.18, duration: 0.42 }}
+        className="border-b border-black/5 bg-white"
+      >
+        {/* Top row */}
+        <div
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          className="flex gap-3 py-3 items-center"
+          onClick={() => {
+            setIsFocused(true);
+            setFocusTarget("title");
+          }}
+        >
+          {/* Circle checkbox */}
+          <CircleCheckbox
+            checked={!!item.isComplete}
+            onToggle={() => updateItemById(item.id, { isComplete: !item.isComplete })}
+            label={item.title || "Todo"}
+          />
+
+          {/* Title input */}
+          <input
+            ref={titleRef}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsFocused(true);
+              setFocusTarget("title");
+            }}
+            onChange={(e) => updateItemById(item.id, { title: e.target.value })}
+            placeholder="Add a to-do"
+            className="leading-tight flex-auto border-transparent border-0 bg-transparent !text-base p-0 outline-none focus-visible:ring-0"
+            value={item.title}
+          />
+
+          {/* Date controls (react-datepicker) */}
+          <div
+            className="relative shrink-0 flex items-center gap-0.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {!dateLabel && (
+              <motion.button
+                type="button"
+                animate={{ opacity: isHovered ? 1 : 0 }}
+                onClick={openReactDatePicker}
+                aria-label="Edit due date"
+                className="p-1 rounded-md hover:bg-black/5"
+              >
+                <Calendar className="w-4 h-4 text-black/40" />
+              </motion.button>
+            )}
+
+            {dateLabel && (
+              <button
+                type="button"
+                onClick={openReactDatePicker}
+                aria-label={`Edit due date ${dateLabel}`}
+                className="text-sm text-black/40 hover:text-black/70 rounded-md"
+              >
+                {dateLabel}
+              </button>
+            )}
+
+            {/* Absolutely positioned portal directly beneath the controls */}
+            <div id={portalId} className="absolute left-0 top-full mt-1 z-[70]" />
+
+            {/* Hidden input anchors Popper; calendar content portals into the div above */}
+            <DatePicker
+              ref={datepickerRef}
+              selected={selectedDate}
+              onChange={(date) => {
+                const ymd = toYMD(date);
+                updateItemById(item.id, { dueDate: ymd });
+              }}
+              dateFormat="yyyy-MM-dd"
+              customInput={<HiddenAnchorInput />}
+              shouldCloseOnSelect
+              showPopperArrow={false}
+              popperPlacement="bottom-start"
+              popperStrategy="absolute"
+              popperModifiers={[
+                { name: "offset", options: { offset: [0, 6] } },
+                { name: "preventOverflow", options: { padding: 8, boundary: "clippingParents" } },
+              ]}
+              /* Use our custom header so we can show "Prev" and "Next" at the extremes */
+              renderCustomHeader={renderHeader}
+              // NOTE: no withPortal — we portal into our local absolute container instead
+              portalId={portalId}
+              onClickOutside={() => datepickerRef.current?.setOpen(false)}
+            />
+          </div>
+
+          {/* Ellipsis: appears only on hover; click vs drag logic */}
+          <div
+            className="relative shrink-0 w-2 flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <motion.button
+              type="button"
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              className="p-1 rounded-md select-none text-black/30 hover:text-black cursor-pointer"
+              style={{ touchAction: "none" }}
+              animate={{ opacity: isHovered ? 1 : 0 }}
+              onPointerDown={onEllipsisPointerDown}
+              onPointerMove={onEllipsisPointerMove}
+              onPointerUp={onEllipsisPointerUp}
+              onPointerCancel={onEllipsisPointerCancel}
+            >
+              <EllipsisVertical className="w-4 h-4" />
+            </motion.button>
+
+            <AnimatePresence>
+              {menuOpen && (
+                <motion.div
+                  ref={menuRef}
+                  initial={{ opacity: 0, scale: 0.98, y: -2 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.98, y: -2 }}
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.18 }}
+                  className="absolute right-0 top-full mt-1 min-w-[120px] rounded-md border border-black/10 bg-white shadow-md z-20"
+                  role="menu"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    role="menuitem"
+                    className="w-full text-left text-sm px-3 py-2 hover:bg-black/5"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      deleteTodoById(item.id);
+                    }}
+                  >
+                    Delete
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Details area */}
+        <DetailsSection
+          isOpen={detailsOpen}
+          item={item}
+          updateItemById={updateItemById}
+          noteRef={noteRef}
+          autoFocusNote={isFocused && focusTarget === "note"}
+          onClickInside={() => {
+            setIsFocused(true);
+            setFocusTarget("note");
+          }}
+        />
+      </motion.div>
+    </Reorder.Item>
+  );
+}
+
+/* ============================= List detail ============================= */
+function TodoList({
+  list,
+  items,
+  setItemsByOrder, // (ids: string[]) => void
+  updateItemById,
+  deleteItemById,
+  updateListById,
+  recentlyAddedId,
+}) {
+  const titleInputRef = useRef(null);
+  const [titleDraft, setTitleDraft] = useState(list.title ?? "");
+
+  useEffect(() => {
+    setTitleDraft(list.title ?? "");
+  }, [list.id, list.title]);
+
+  const commitTitle = () => {
+    const trimmed = titleDraft.trim();
+    const nextTitle = trimmed.length > 0 ? trimmed : DEFAULT_LIST_TITLE;
+    if (nextTitle !== titleDraft) {
+      setTitleDraft(nextTitle);
+    }
+    if ((list.title ?? "") !== nextTitle) {
+      updateListById(list.id, { title: nextTitle });
+    }
+  };
+
+  const handleTitleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitTitle();
+      // Blur after commit so focus ring disappears once saved
+      titleInputRef.current?.blur();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setTitleDraft(list.title ?? "");
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(() => {
+          titleInputRef.current?.blur();
+        });
+      } else {
+        titleInputRef.current?.blur();
+      }
+    }
+  };
+
+  const itemIds = useMemo(() => items.map((t) => t.id), [items]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1, transition: { duration: 0 } }}
+      exit={{ opacity: 0, transition: { delay: 0.24, duration: 0.24 } }}
+      transition={{ type: "spring", bounce: 0.16, duration: 0.56 }}
+      className="bg-white w-full h-full overflow-auto"
+      layout
+    >
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ type: "spring", bounce: 0.16, duration: 0.56 }}
+        className="w-full flex top-0 left-0 absolute h-14 bg-white z-10"
+      />
+      <motion.div
+        initial={{ scale: 1, y: 0, fontWeight: 500 }}
+        animate={{ scale: 1.5, y: 40, fontWeight: 500 }}
+        exit={{ scale: 1, y: 0, fontWeight: 500 }}
+        transition={{ type: "spring", bounce: 0.16, duration: 0.56 }}
+        className="text-md tracking-tight m-5 origin-top-left"
+      >
+        <input
+          ref={titleInputRef}
+          type="text"
+          value={titleDraft}
+          onChange={(e) => setTitleDraft(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={handleTitleKeyDown}
+          placeholder={DEFAULT_LIST_TITLE}
+          className="w-full bg-transparent border-0 outline-none focus:ring-0 focus-visible:ring-0 p-0 m-0 text-inherit"
+        />
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1, transition: { duration: 0 } }}
+        exit={{ opacity: 0 }}
+        transition={{ type: "spring", bounce: 0.16, duration: 0.56 }}
+        className="p-5 mt-10 flex flex-col"
+        layout
+      >
+        {/* Use ID-based reordering to avoid flicker */}
+        <Reorder.Group
+          as="div"
+          axis="y"
+          values={itemIds}
+          onReorder={setItemsByOrder}
+        >
+          <AnimatePresence initial={false}>
+            {items.map((item, i) => (
+              <TodoListItem
+                key={item.id}
+                index={i}
+                item={item}
+                isNew={recentlyAddedId === item.id}
+                updateItemById={updateItemById}
+                deleteTodoById={deleteItemById}
+              />
+            ))}
+          </AnimatePresence>
+        </Reorder.Group>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ============================ Zoom container ============================ */
+function ZoomViewer({ origin, containerRef, children }) {
+  const originRect = getRelativePosition(
+    origin.current.getBoundingClientRect(),
+    containerRef.current.getBoundingClientRect()
+  );
+  const initial = {
+    left: originRect.left,
+    top: originRect.top,
+    width: originRect.width,
+    height: originRect.height,
+  };
+  const animate = { left: 0, top: 0, width: "100%", height: "100%" };
+  return (
+    <motion.div
+      initial={initial}
+      animate={animate}
+      exit={initial}
+      transition={{ type: "spring", bounce: 0.16, duration: 0.56 }}
+      className="absolute overflow-hidden w-full h-full"
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/* Shows a list row with a smaller trash icon on hover (like todos) */
+function TodoListGroup({
+  index,
+  title,
+  isExpanded,
+  containerRef,
+  setCurrentTodoList,
+  onDelete,
+  registerRowRef,
+}) {
+  const ref = useRef(null);
+  const [height, setHeight] = useState("auto");
+  const [isHovered, setIsHovered] = useState(false);
+
+  useEffect(() => {
+    if (ref.current) setHeight(ref.current.getBoundingClientRect().height);
+    if (registerRowRef) registerRowRef(index, ref);
+  }, [index, registerRowRef]);
+
+  return (
+    <motion.div animate={{ height: isExpanded ? "100%" : height }}>
+      <div
+        ref={ref}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        className="p-5 text-md cursor-pointer hover:bg-white/40 border-b border-black/10 flex items-center gap-3"
+        onClick={() => setCurrentTodoList(ref, index)}
+      >
+        <div className="flex-1">{title}</div>
+        <MotionTrash
+          animate={{ opacity: isHovered ? 1 : 0 }}
+          className="w-4 h-4 text-black/30 hover:text-black cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(index);
+          }}
+        />
+      </div>
+    </motion.div>
+  );
+}
+
+/* ================================ App =================================== */
+export function App() {
+  const ref = useRef(null);
+  const initialData = buildInitialData();
+  const [data, setData] = useState(initialData);
+
+  useEffect(() => {
+    injectDatepickerStylesOnce();
+  }, []);
+
+  // index of the currently opened list, or null
+  const initialOpenIndex = useMemo(() => {
+    const idx = (initialData.lists || []).findIndex((l) => l.isCurrentlyOpen);
+    return idx >= 0 ? idx : null;
+  }, [initialData]);
+
+  const [currentTodoListRef, setCurrentTodoListRef] = useState(null);
+  const [currentTodoList, setCurrentTodoList] = useState(initialOpenIndex);
+  const [recentlyAddedId, setRecentlyAddedId] = useState(null);
+
+  const [rowRefs, setRowRefs] = useState({}); // index -> ref
+
+  const registerRowRef = (index, rowRef) => {
+    setRowRefs((prev) => ({ ...prev, [index]: rowRef }));
+  };
+
+  // If we default-opened a list via isCurrentlyOpen, try to capture its row ref for ZoomViewer
+  useEffect(() => {
+    if (currentTodoList != null && !currentTodoListRef) {
+      const r = rowRefs[currentTodoList];
+      if (r && r.current) {
+        setCurrentTodoListRef(r);
+      }
+    }
+  }, [currentTodoList, currentTodoListRef, rowRefs]);
+
+  const todoLists = data.lists;
+  const currentList = currentTodoList != null ? todoLists[currentTodoList] : null;
+  const currentItems = currentList ? currentList.todos : [];
+
+  /* List-level ops */
+  const addList = () => {
+    setData((prev) => ({
+      lists: [{ id: uid(), title: "New List", isCurrentlyOpen: false, todos: [] }, ...prev.lists],
+    }));
+    setCurrentTodoList((idx) => (idx == null ? idx : idx + 1));
+  };
+
+  const deleteList = (listIndex) => {
+    setData((prev) => {
+      const lists = prev.lists.slice();
+      lists.splice(listIndex, 1);
+      return { lists };
+    });
+    setCurrentTodoList((idx) => {
+      if (idx == null) return idx;
+      if (idx === listIndex) {
+        setCurrentTodoListRef(null);
+        return null;
+      }
+      if (idx > listIndex) return idx - 1;
+      return idx;
+    });
+  };
+
+  const openList = (r, index) => {
+    setCurrentTodoListRef(r || null);
+    setCurrentTodoList(index);
+    // Optionally reflect open state back into data
+    setData((prev) => {
+      const lists = prev.lists.map((l, i) => ({ ...l, isCurrentlyOpen: i === index }));
+      return { lists };
+    });
+  };
+
+  const updateListById = (listId, val) => {
+    setData((prev) => ({
+      lists: prev.lists.map((l) => (l.id === listId ? { ...l, ...val } : l)),
+    }));
+  };
+
+  /* Todo-level ops, id-based (stable across reorders) */
+  const addTodo = () => {
+    if (currentList == null) return;
+    const newId = uid();
+    setRecentlyAddedId(newId);
+    setTimeout(() => setRecentlyAddedId(null), 600);
+
+    setData((prev) => {
+      const lists = prev.lists.slice();
+      const listIdx = currentTodoList;
+      const list = { ...lists[listIdx] };
+      list.todos = [
+        { id: newId, title: "", isComplete: false, note: "", dueDate: null },
+        ...list.todos,
+      ];
+      lists[listIdx] = list;
+      return { lists };
+    });
+  };
+
+  const deleteItemById = (id) => {
+    if (currentList == null) return;
+    setData((prev) => {
+

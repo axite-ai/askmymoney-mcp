@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. For a deeper understanding of how the OpenAI Apps SDK behaves in ChatGPT, reference `llm_context/appssdk/APPS_SDK_DOCS.txt` (docs) and `llm_context/appssdk/APPS_SDK_EXAMPLES_REPO.txt` (working examples); related Better Auth references live under `llm_context/betterauth/` (for example `BETTER_AUTH_MCP_PLUGIN_DOCS.txt`).
 
 ## Project Overview
 
