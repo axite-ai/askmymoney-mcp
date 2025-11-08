@@ -15,8 +15,16 @@ import {
   createPlaidRequiredResponse,
 } from "@/lib/utils/auth-responses";
 import { withMcpAuth } from "better-auth/plugins";
+import { baseURL } from "@/baseUrl";
+import { logOAuthRequest, logOAuthError } from "@/lib/auth/oauth-logger";
 
 console.log("Auth API methods at startup:", Object.keys(auth.api));
+
+// Helper to fetch HTML from Next.js pages (Vercel template pattern)
+const getAppsSdkCompatibleHtml = async (baseUrl: string, path: string) => {
+  const result = await fetch(`${baseUrl}${path}`);
+  return await result.text();
+};
 
 // Type for OpenAI-extended MCP tool configurations
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,37 +72,31 @@ const handler = withMcpAuth(auth, async (req, session) => {
     // ============================================================================
     // WIDGET RESOURCES
     // ============================================================================
-    const fs = await import('fs');
-    const path = await import('path');
-    const widgetsDir = path.join(process.cwd(), 'widgets', 'dist', 'bundled');
-
-    // Helper to read widget HTML
-    const readWidgetHtml = (name: string) => {
-      try {
-        const filePath = path.join(widgetsDir, `${name}.html`);
-        return fs.readFileSync(filePath, 'utf-8');
-      } catch (error) {
-        console.error(`[MCP] Failed to read widget ${name}:`, error);
-        return null;
-      }
-    };
-
-    // Register widget resources
+    // Fetch HTML from Next.js pages (Vercel template pattern)
     const widgets = [
-      { id: 'account-balances', title: 'Account Balances Widget', description: 'Interactive account balances view' },
-      { id: 'transactions', title: 'Transactions Widget', description: 'Transaction list with details' },
-      { id: 'spending-insights', title: 'Spending Insights Widget', description: 'Category-based spending breakdown' },
-      { id: 'account-health', title: 'Account Health Widget', description: 'Account health status and warnings' },
+      { id: 'account-balances', title: 'Account Balances Widget', description: 'Interactive account balances view', path: '/widgets/account-balances' },
+      { id: 'transactions', title: 'Transactions Widget', description: 'Transaction list with details', path: '/widgets/transactions' },
+      { id: 'spending-insights', title: 'Spending Insights Widget', description: 'Category-based spending breakdown', path: '/widgets/spending-insights' },
+      { id: 'account-health', title: 'Account Health Widget', description: 'Account health status and warnings', path: '/widgets/account-health' },
     ];
 
     for (const widget of widgets) {
-      const html = readWidgetHtml(widget.id);
-      if (html) {
-        server.registerResource(
-          widget.id,
-          `ui://widget/${widget.id}.html`,
-          {},
-          async () => ({
+      server.registerResource(
+        widget.id,
+        `ui://widget/${widget.id}.html`,
+        {
+          title: widget.title,
+          description: widget.description,
+          mimeType: 'text/html+skybridge',
+          _meta: {
+            'openai/widgetDescription': widget.description,
+            'openai/widgetPrefersBorder': true,
+          },
+        },
+        async () => {
+          // Fetch HTML from Next.js at runtime
+          const html = await getAppsSdkCompatibleHtml(baseURL, widget.path);
+          return {
             contents: [{
               uri: `ui://widget/${widget.id}.html`,
               mimeType: 'text/html+skybridge',
@@ -108,10 +110,10 @@ const handler = withMcpAuth(auth, async (req, session) => {
                 },
               },
             }],
-          })
-        );
-        console.log(`[MCP] Registered widget: ${widget.id}`);
-      }
+          };
+        }
+      );
+      console.log(`[MCP] Registered widget: ${widget.id} (fetches from ${widget.path})`);
     }
 
     // ============================================================================
