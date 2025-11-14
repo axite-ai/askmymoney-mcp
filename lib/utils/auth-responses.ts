@@ -47,9 +47,10 @@ export function createLoginPromptResponse(featureName?: string) {
  * Create a response prompting the user to subscribe
  *
  * @param featureName - Optional name of the feature requiring subscription
+ * @param userId - User ID from the authenticated MCP session
  * @returns MCP tool response with subscription-required widget reference
  */
-export function createSubscriptionRequiredResponse(featureName?: string) {
+export function createSubscriptionRequiredResponse(featureName?: string, userId?: string) {
   const baseMessage = featureName
     ? `To access ${featureName}, please subscribe to a plan.`
     : "This feature requires a subscription. Please choose a plan.";
@@ -69,11 +70,12 @@ export function createSubscriptionRequiredResponse(featureName?: string) {
         text: baseMessage,
       } as { [x: string]: unknown; type: "text"; text: string },
     ],
-    // Include structured content so widget can access feature name and pricing URL
+    // Include structured content so widget can access feature name, pricing URL, and userId
     structuredContent: {
       featureName: featureName || "this feature",
       error_message: "Subscription required",
       pricingUrl: `${baseURL}/pricing`,
+      userId, // Pass userId so widget can use it in server action
     },
     isError: false,
     _meta: responseMeta,

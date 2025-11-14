@@ -47,7 +47,7 @@ import { stripe } from "@better-auth/stripe"
 import Stripe from "stripe"
 
 const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2025-09-30.clover" // Latest API version as of Stripe SDK v19
+    apiVersion: "2025-10-29.clover" // Latest API version as of Stripe SDK v19
 })
 
 export const auth = betterAuth({
@@ -312,7 +312,7 @@ subscription: {
                 where: {
                     organizationId: referenceId,
                     userId: user.id
-                }   
+                }
             });
             return org?.role === "owner"
         }
@@ -411,11 +411,11 @@ type createBillingPortal = {
     */
     locale?: string
     /**
-     * Reference id of the subscription to upgrade. 
+     * Reference id of the subscription to upgrade.
      */
     referenceId?: string = "123"
     /**
-     * Return URL to redirect back after successful subscription. 
+     * Return URL to redirect back after successful subscription.
      */
     returnUrl?: string
 }
@@ -531,40 +531,40 @@ Provides the TypeScript type definition for the parameters used when upgrading a
 ```typescript
 type upgradeSubscription = {
     /**
-     * The name of the plan to upgrade to. 
+     * The name of the plan to upgrade to.
      */
     plan: string = "pro"
     /**
-     * Whether to upgrade to an annual plan. 
+     * Whether to upgrade to an annual plan.
      */
     annual?: boolean = true
     /**
-     * Reference id of the subscription to upgrade. 
+     * Reference id of the subscription to upgrade.
      */
     referenceId?: string = "123"
     /**
-     * The id of the subscription to upgrade. 
+     * The id of the subscription to upgrade.
      */
     subscriptionId?: string = "sub_123"
     metadata?: Record<string, any>
     /**
-     * Number of seats to upgrade to (if applicable). 
+     * Number of seats to upgrade to (if applicable).
      */
     seats?: number = 1
     /**
-     * Callback URL to redirect back after successful subscription. 
+     * Callback URL to redirect back after successful subscription.
      */
     successUrl: string
     /**
      * If set, checkout shows a back button and customers will be directed here if they cancel payment.
      */
-    cancelUrl: string 
+    cancelUrl: string
     /**
      * URL to take customers to when they click on the billing portal’s link to return to your website.
      */
     returnUrl?: string
     /**
-     * Disable redirect after successful subscription. 
+     * Disable redirect after successful subscription.
      */
     disableRedirect: boolean = true
 }
@@ -632,7 +632,7 @@ This code defines the type for listing active subscriptions and demonstrates how
 ```ts
 type listActiveSubscriptions = {
     /**
-     * Reference id of the subscription to list. 
+     * Reference id of the subscription to list.
      */
     referenceId?: string = '123'
 }
@@ -1011,7 +1011,7 @@ type cancelSubscription = {
      */
     referenceId?: string = 'org_123'
     /**
-     * The id of the subscription to cancel. 
+     * The id of the subscription to cancel.
      */
     subscriptionId?: string = 'sub_123'
     /**
@@ -1104,7 +1104,7 @@ subscription: {
                 organizationId: referenceId
             }
         });
-        
+
         return member?.role === "owner" || member?.role === "admin";
     }
 }
@@ -1162,7 +1162,7 @@ type restoreSubscription = {
      */
     referenceId?: string = '123'
     /**
-     * The id of the subscription to restore. 
+     * The id of the subscription to restore.
      */
     subscriptionId?: string = 'sub_123'
 }
@@ -1320,7 +1320,7 @@ export const auth = betterAuth({
           if (user.email.includes("admin")) {
             return false; // Abort deletion
           }
-          
+
           return true; // Allow deletion
         },
         after: async (user) => {

@@ -32,7 +32,7 @@ export function middleware(request: NextRequest) {
         "Access-Control-Allow-Origin": allowOrigin,
         "Access-Control-Allow-Credentials": isAllowedOrigin ? "true" : "false",
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept, Origin, Next-Action, Next-Router-State-Tree",
         "Access-Control-Max-Age": "86400",
       },
     });
@@ -47,7 +47,7 @@ export function middleware(request: NextRequest) {
     response.headers.set("Access-Control-Allow-Credentials", "true");
   }
   response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-  response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin");
+  response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin, Next-Action, Next-Router-State-Tree");
 
   // Expose headers that OAuth/MCP clients need
   response.headers.set("Access-Control-Expose-Headers", "WWW-Authenticate, Location, Content-Type, Authorization");
@@ -57,9 +57,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match all API routes and well-known routes
-    "/api/:path*",
-    "/.well-known/:path*",
-    "/mcp/:path*",
+    // Match all routes to handle CORS for server actions and API routes
+    "/(.*)",
   ],
 };

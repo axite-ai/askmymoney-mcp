@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useWidgetProps } from "@/app/hooks/use-widget-props";
+import { upgradeSubscription } from "@/app/widgets/subscription-required/actions";
 
 const PLANS = [
   {
@@ -36,6 +37,7 @@ export default function SubscriptionRequired() {
   const [error, setError] = React.useState<string | null>(null);
 
   const featureName = toolOutput?.featureName || 'this feature';
+  const userId = toolOutput?.userId;
 
   const handleSelectPlan = (planId: string) => {
     if (isLoading) return;
@@ -45,41 +47,40 @@ export default function SubscriptionRequired() {
   const handleSubscribe = async () => {
     if (!selectedPlan || isLoading) return;
 
+    // Validate we have userId from the authenticated MCP session
+    if (!userId) {
+      setError('Authentication error. Please refresh and try again.');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const result = await window.openai.callTool('create_checkout_session', {
-        plan: selectedPlan
-      });
+      console.log('[Subscription Widget] Calling server action for plan:', selectedPlan, 'userId:', userId);
 
-      console.log('[Subscription Widget] Tool result:', result);
+      const result = await upgradeSubscription(userId, selectedPlan);
 
-      // Access structuredContent from the MCP tool response
-      // The result object contains the full MCP response including structuredContent
-      let checkoutUrl: string | undefined;
+      console.log('[Subscription Widget] Server action result:', result);
 
-      // Try to access structuredContent directly
-      if (result.structuredContent?.checkoutUrl) {
-        checkoutUrl = result.structuredContent.checkoutUrl;
-      }
-      // Fallback: try parsing result if it's a JSON string
-      else if (typeof result.result === 'string') {
-        try {
-          const parsed = JSON.parse(result.result);
-          checkoutUrl = parsed.checkoutUrl;
-        } catch {
-          // If not JSON, result.result might be the URL directly
-          checkoutUrl = result.result;
-        }
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create checkout session');
       }
 
-      if (!checkoutUrl) {
+      if (!result.checkoutUrl) {
         throw new Error('No checkout URL returned from server');
       }
 
-      console.log('[Subscription Widget] Opening checkout URL:', checkoutUrl);
-      window.openai.openExternal({ href: checkoutUrl });
+      console.log('[Subscription Widget] Opening checkout URL:', result.checkoutUrl);
+
+      // Check if we're in ChatGPT MCP context
+      if (typeof window !== 'undefined' && window.openai?.openExternal) {
+        // In ChatGPT iframe - use openExternal
+        window.openai.openExternal({ href: result.checkoutUrl });
+      } else {
+        // Regular browser - use window.location
+        window.location.href = result.checkoutUrl;
+      }
     } catch (error: unknown) {
       console.error('Subscription error:', error);
       setError(error instanceof Error ? error.message : 'Failed to start subscription. Please try again.');

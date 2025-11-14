@@ -7,29 +7,12 @@
 
 import { betterAuth } from "better-auth";
 import { mcp, apiKey, jwt } from "better-auth/plugins";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { stripe } from "@better-auth/stripe";
-import { Pool } from "pg";
+import { db, pool } from "@/lib/db";
 import { Redis } from "ioredis";
 import Stripe from "stripe";
 import type { Subscription, StripePlan } from "@better-auth/stripe";
-
-// Create PostgreSQL connection pool
-const pool = new Pool({
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: parseInt(process.env.POSTGRES_PORT || '5432'),
-  database: process.env.POSTGRES_DATABASE || 'askmymoney',
-  user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'postgres',
-  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
-
-// Add error handling for the pool
-pool.on('error', (error) => {
-  console.error('[Postgres] Unexpected error on idle client', error);
-});
 
 // Create Redis client for secondary storage (rate limiting, caching)
 if (!process.env.REDIS_URL) {
@@ -49,9 +32,14 @@ redis.on('connect', () => {
   console.log('[Redis] Connected successfully for rate limiting');
 });
 
+// Add error handling for the pool (re-exported from db)
+pool.on('error', (error) => {
+  console.error('[Postgres] Unexpected error on idle client', error);
+});
+
 // Create Stripe client for subscription management
 const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: "2025-09-30.clover",
+  apiVersion: "2025-10-29.clover",
 });
 
 // Helper utilities for composing URLs without duplicate slashes
@@ -81,8 +69,10 @@ const resourceURL = process.env.MCP_RESOURCE_URL || appOrigin;
 
 // Initialize Better Auth with MCP and Stripe plugins
 export const auth = betterAuth({
-  // Database configuration
-  database: pool,
+  // Database configuration - using Drizzle adapter
+  database: drizzleAdapter(db, {
+    provider: "pg",
+  }),
 
   // Secondary storage for caching and rate limiting (Redis)
   secondaryStorage: {
@@ -244,15 +234,53 @@ export const auth = betterAuth({
           id: event.id,
           created: new Date(event.created * 1000).toISOString(),
         });
+
+        // Debug: Log metadata for subscription-related events
+        if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
+          const subscription = event.data.object as any;
+          console.log("[Stripe Webhook] Subscription event details:", {
+            subscriptionId: subscription.id,
+            customerId: subscription.customer,
+            metadata: subscription.metadata,
+            status: subscription.status,
+            currentPeriodStart: new Date(subscription.current_period_start * 1000).toISOString(),
+            currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+          });
+        }
+
+        if (event.type === "checkout.session.completed") {
+          const session = event.data.object as any;
+          console.log("[Stripe Webhook] Checkout session completed:", {
+            sessionId: session.id,
+            customerId: session.customer,
+            subscriptionId: session.subscription,
+            sessionMetadata: session.metadata,
+            paymentStatus: session.payment_status,
+            mode: session.mode,
+          });
+
+          // Fetch the subscription object to inspect its metadata
+          if (session.subscription) {
+            try {
+              const subscription = await stripeClient.subscriptions.retrieve(session.subscription as string);
+              console.log("[Stripe Webhook] Retrieved subscription object:", {
+                id: subscription.id,
+                customer: subscription.customer,
+                subscriptionMetadata: subscription.metadata,
+                status: subscription.status,
+                items: subscription.items.data.map(item => ({
+                  priceId: item.price.id,
+                  productId: item.price.product,
+                })),
+              });
+            } catch (error) {
+              console.error("[Stripe Webhook] Failed to retrieve subscription:", error);
+            }
+          }
+        }
       },
       subscription: {
         enabled: true,
-        // Allow API key to create subscriptions for any user
-        authorizeReference: async () => {
-          // If using API key authentication, allow creating subscriptions for any referenceId
-          // This is safe because the API key is only accessible server-side
-          return true;
-        },
         plans: [
           {
             name: "basic",
@@ -304,20 +332,57 @@ export const auth = betterAuth({
           subscription: Subscription;
           plan: StripePlan;
         }) => {
-          console.log("[Stripe] Subscription complete - HOOK CALLED", {
+          console.log("[Stripe] onSubscriptionComplete HOOK CALLED", {
             subscriptionId: subscription.id,
             referenceId: subscription.referenceId,
             plan: plan.name,
             status: subscription.status,
             stripeSubscriptionId: subscription.stripeSubscriptionId,
+            stripeCustomerId: subscription.stripeCustomerId,
+            periodStart: subscription.periodStart,
+            periodEnd: subscription.periodEnd,
+            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
           });
+
+          // Verify subscription was written to database
+          try {
+            const client = await pool.connect();
+
+            try {
+              // Check if subscription exists in database
+              const dbCheckResult = await client.query(
+                'SELECT * FROM subscription WHERE "referenceId" = $1',
+                [subscription.referenceId]
+              );
+              console.log("[Stripe] Database verification after onSubscriptionComplete:", {
+                found: dbCheckResult.rowCount,
+                subscriptions: dbCheckResult.rows,
+              });
+
+              // Also check by stripeSubscriptionId
+              if (subscription.stripeSubscriptionId) {
+                const stripeIdCheckResult = await client.query(
+                  'SELECT * FROM subscription WHERE "stripeSubscriptionId" = $1',
+                  [subscription.stripeSubscriptionId]
+                );
+                console.log("[Stripe] Database lookup by stripeSubscriptionId:", {
+                  stripeSubscriptionId: subscription.stripeSubscriptionId,
+                  found: stripeIdCheckResult.rowCount,
+                  subscriptions: stripeIdCheckResult.rows,
+                });
+              }
+            } finally {
+              client.release();
+            }
+          } catch (error) {
+            console.error("[Stripe] Failed to verify subscription in database:", error);
+          }
 
           // Send subscription confirmation email
           try {
             const { EmailService } = await import("@/lib/services/email-service");
 
             // Get user details from database
-            const pool = auth.options.database as Pool;
             const client = await pool.connect();
 
             try {
@@ -352,8 +417,12 @@ export const auth = betterAuth({
         }: {
           subscription: Subscription;
         }) => {
-          console.log("[Stripe] Subscription updated", {
+          console.log("[Stripe] onSubscriptionUpdate HOOK CALLED", {
             subscriptionId: subscription.id,
+            referenceId: subscription.referenceId,
+            plan: subscription.plan,
+            status: subscription.status,
+            stripeSubscriptionId: subscription.stripeSubscriptionId,
           });
         },
         onSubscriptionCancel: async ({
@@ -361,8 +430,11 @@ export const auth = betterAuth({
         }: {
           subscription: Subscription;
         }) => {
-          console.log("[Stripe] Subscription canceled", {
+          console.log("[Stripe] onSubscriptionCancel HOOK CALLED", {
             subscriptionId: subscription.id,
+            referenceId: subscription.referenceId,
+            status: subscription.status,
+            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
           });
         },
         onSubscriptionDeleted: async ({
@@ -370,8 +442,10 @@ export const auth = betterAuth({
         }: {
           subscription: Subscription;
         }) => {
-          console.warn("[Stripe] Subscription deleted", {
+          console.warn("[Stripe] onSubscriptionDeleted HOOK CALLED", {
             subscriptionId: subscription.id,
+            referenceId: subscription.referenceId,
+            stripeSubscriptionId: subscription.stripeSubscriptionId,
           });
         },
       },

@@ -79,6 +79,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
       { id: 'spending-insights', title: 'Spending Insights Widget', description: 'Category-based spending breakdown', path: '/widgets/spending-insights' },
       { id: 'account-health', title: 'Account Health Widget', description: 'Account health status and warnings', path: '/widgets/account-health' },
       { id: 'plaid-required', title: 'Connect Bank Account', description: 'Prompts user to connect their bank account via Plaid', path: '/widgets/plaid-required' },
+      { id: 'subscription-required', title: 'Choose Subscription Plan', description: 'Select and subscribe to a plan to unlock features', path: '/widgets/subscription-required' },
     ];
 
     for (const widget of widgets) {
@@ -169,7 +170,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
     async () => {
       try {
         if (!session || !(await hasActiveSubscription(session.userId))) {
-          return createSubscriptionRequiredResponse("account balances");
+          return createSubscriptionRequiredResponse("account balances", session?.userId);
         }
 
           // Check 3: Plaid Connection
@@ -247,7 +248,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
     async ({ startDate, endDate, limit }: { startDate?: string; endDate?: string; limit?: number }) => {
       try {
         if (!session || !(await hasActiveSubscription(session.userId))) {
-          return createSubscriptionRequiredResponse("transactions");
+          return createSubscriptionRequiredResponse("transactions", session?.userId);
         }
 
         // Check 3: Plaid Connection
@@ -327,7 +328,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
     async ({ startDate, endDate }: { startDate?: string; endDate?: string }) => {
       try {
         if (!session || !(await hasActiveSubscription(session.userId))) {
-          return createSubscriptionRequiredResponse("spending insights");
+          return createSubscriptionRequiredResponse("spending insights", session?.userId);
         }
 
         // Check 3: Plaid Connection
@@ -431,7 +432,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
         // Check 2: Active Subscription
         const hasSubscription = await hasActiveSubscription(session.userId);
         if (!hasSubscription) {
-          return createSubscriptionRequiredResponse("account health check");
+          return createSubscriptionRequiredResponse("account health check", session.userId);
         }
 
         // Check 3: Plaid Connection
@@ -526,144 +527,10 @@ const handler = withMcpAuth(auth, async (req, session) => {
     // ============================================================================
     // SUBSCRIPTION CHECKOUT
     // ============================================================================
-    server.registerTool(
-      "create_checkout_session",
-      {
-        title: "Create Subscription Checkout",
-        description: "Create a Stripe checkout session for subscription. Can be called from widgets.",
-        inputSchema: {
-          plan: z.enum(['basic', 'pro', 'enterprise']).describe("The subscription plan to purchase"),
-        },
-        _meta: {
-          securitySchemes: [{ type: "oauth2" }], // Back-compat mirror for ChatGPT
-          "openai/widgetAccessible": true,  // Allow widgets to call this tool
-        },
-        securitySchemes: [{ type: "oauth2" }],
-      } as ExtendedToolConfig,
-      async (args) => {
-        try {
-          if (!session) {
-            return {
-              content: [{ type: "text", text: "Authentication required" }],
-              isError: true,
-            };
-          }
-
-          const plan = args.plan as string;
-
-          console.log('[Checkout Session] Creating Stripe checkout for:', { userId: session.userId, plan });
-
-          // Get the Stripe client and user from auth
-          const Stripe = (await import("stripe")).default;
-          const { Pool } = await import("pg");
-
-          const pool = auth.options.database as InstanceType<typeof Pool>;
-          const client = await pool.connect();
-
-          try {
-            // Get user and their Stripe customer ID from database
-            const userResult = await client.query(
-              'SELECT id, email, name, "stripeCustomerId" FROM "user" WHERE id = $1',
-              [session.userId]
-            );
-
-            const user = userResult.rows[0];
-            if (!user) {
-              throw new Error('User not found');
-            }
-
-            console.log('[Checkout Session] User found:', { userId: user.id, hasStripeId: !!user.stripeCustomerId });
-
-            // Get Stripe client
-            const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-              apiVersion: "2025-09-30.clover",
-            });
-
-            // Get price ID for the plan
-            const planPriceIds: Record<string, string> = {
-              basic: process.env.STRIPE_BASIC_PRICE_ID || '',
-              pro: process.env.STRIPE_PRO_PRICE_ID || '',
-              enterprise: process.env.STRIPE_ENTERPRISE_PRICE_ID || '',
-            };
-
-            const priceId = planPriceIds[plan.toLowerCase()];
-            if (!priceId) {
-              throw new Error(`Invalid plan: ${plan}`);
-            }
-
-            console.log('[Checkout Session] Creating checkout with priceId:', priceId);
-
-            // Create or get Stripe customer
-            let customerId = user.stripeCustomerId;
-            if (!customerId) {
-              const customer = await stripeClient.customers.create({
-                email: user.email,
-                name: user.name || undefined,
-                metadata: { userId: user.id },
-              });
-              customerId = customer.id;
-
-              // Update user with Stripe customer ID
-              await client.query(
-                'UPDATE "user" SET "stripeCustomerId" = $1 WHERE id = $2',
-                [customerId, user.id]
-              );
-
-              console.log('[Checkout Session] Created Stripe customer:', customerId);
-            }
-
-            // Create Stripe checkout session
-            // IMPORTANT: Better Auth expects 'referenceId' not 'userId' in metadata
-            const checkoutSession = await stripeClient.checkout.sessions.create({
-              customer: customerId,
-              mode: 'subscription',
-              line_items: [
-                {
-                  price: priceId,
-                  quantity: 1,
-                },
-              ],
-              success_url: `${baseURL}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
-              cancel_url: `${baseURL}/pricing`,
-              subscription_data: {
-                metadata: {
-                  referenceId: user.id,  // Better Auth uses referenceId, not userId
-                  plan: plan,
-                },
-              },
-              metadata: {
-                referenceId: user.id,  // Better Auth uses referenceId
-                plan: plan,
-              },
-            });
-
-            console.log('[Checkout Session] Created successfully:', checkoutSession.url);
-
-            return {
-              content: [{
-                type: "text",
-                text: `Checkout session created for ${plan} plan`,
-              }],
-              structuredContent: {
-                checkoutUrl: checkoutSession.url,
-                plan,
-              },
-            };
-          } finally {
-            client.release();
-          }
-        } catch (error) {
-          console.error('[Tool] create_checkout_session error', { error });
-          return {
-            content: [{
-              type: "text",
-              text: error instanceof Error ? error.message : "Failed to create checkout session",
-            }],
-            isError: true,
-          };
-        }
-      }
-    );
+    // NOTE: Subscription checkout is now handled by the subscription-required widget
+    // via server actions that call auth.api.upgradeSubscription() with admin API key.
+    // This ensures Better Auth properly processes webhooks and creates subscription records.
+    // The old create_checkout_session tool has been removed.
 
     // ============================================================================
     // ADVANCED TEST WIDGET
