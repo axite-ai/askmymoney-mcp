@@ -293,8 +293,10 @@ export class WebhookService {
         });
 
         // Update last synced timestamp
+        // TODO: Implement updateLastSynced method or track sync time in plaid_items table
         if (userId) {
-          await UserService.updateLastSynced(userId, webhook.item_id);
+          console.log(`[Webhook] Transactions synced for user ${userId}, item ${webhook.item_id}`);
+          // await UserService.updateLastSynced(userId, webhook.item_id);
         }
         break;
 

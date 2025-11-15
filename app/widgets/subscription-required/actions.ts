@@ -142,6 +142,7 @@ export async function upgradeSubscription(userId: string, plan: string): Promise
           referenceId: userId, // CRITICAL: Better Auth webhooks look for referenceId here
           plan: planLower, // CRITICAL: Better Auth webhooks look for plan here
         },
+        trial_period_days: planLower === 'pro' ? 14 : undefined,
       },
     });
 

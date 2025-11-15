@@ -30,8 +30,15 @@ const PLANS = [
   }
 ];
 
+interface SubscriptionRequiredProps extends Record<string, unknown> {
+  featureName?: string;
+  userId?: string;
+  error_message?: string;
+  pricingUrl?: string;
+}
+
 export default function SubscriptionRequired() {
-  const toolOutput = useWidgetProps();
+  const toolOutput = useWidgetProps<SubscriptionRequiredProps>();
   const [selectedPlan, setSelectedPlan] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -90,10 +97,10 @@ export default function SubscriptionRequired() {
   };
 
   return (
-    <div className="p-4 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 border border-blue-500/30 text-white shadow-xl">
+    <div className="p-4 rounded-lg bg-linear-to-br from-gray-800 to-gray-900 border border-blue-500/30 text-white shadow-xl">
       <div>
         <div className="flex items-start mb-4">
-          <svg className="w-6 h-6 text-blue-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-6 h-6 text-blue-400 mr-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
           <div className="flex-1">
@@ -129,7 +136,7 @@ export default function SubscriptionRequired() {
               <ul className="space-y-1">
                 {plan.features.map(feature => (
                   <li key={feature} className="flex items-center text-xs text-gray-300">
-                    <svg className="w-3 h-3 text-green-400 mr-1.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3 text-green-400 mr-1.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                     </svg>
                     <span>{feature}</span>
@@ -144,7 +151,7 @@ export default function SubscriptionRequired() {
           id="subscribe-btn"
           disabled={!selectedPlan || isLoading}
           onClick={handleSubscribe}
-          className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold py-3 px-4 rounded-lg transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-linear-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold py-3 px-4 rounded-lg transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isLoading ? (
             <span className="flex items-center justify-center">
