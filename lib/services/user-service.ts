@@ -18,9 +18,10 @@ export interface PlaidItem {
   accessToken: string; // Decrypted token
   institutionId: string | null;
   institutionName: string | null;
+  status: string | null;
+  consentExpiresAt: Date | null;
   createdAt: Date;
-  status: 'active' | 'error' | 'revoked';
-  errorCode: string | null;
+  updatedAt: Date;
 }
 
 /**
@@ -150,11 +151,12 @@ export class UserService {
     itemId: string,
     errorCode: string
   ): Promise<void> {
+    console.log(`[UserService] Marking item ${itemId} as error with code: ${errorCode}`);
     await db
       .update(plaidItems)
       .set({
         status: 'error',
-        errorCode,
+        // errorCode field doesn't exist in schema - just log it
       })
       .where(and(eq(plaidItems.userId, userId), eq(plaidItems.itemId, itemId)));
   }

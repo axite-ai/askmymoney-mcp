@@ -7,7 +7,7 @@
 export const logOAuthRequest = (
   endpoint: string,
   request: Request,
-  additionalInfo?: Record<string, any>
+  additionalInfo?: Record<string, unknown>
 ) => {
   const url = new URL(request.url);
   console.log(`[OAuth] ${endpoint} request`, {
@@ -27,7 +27,7 @@ export const logOAuthRequest = (
 export const logOAuthResponse = (
   endpoint: string,
   response: Response,
-  body?: any
+  body?: Record<string, unknown>
 ) => {
   console.log(`[OAuth] ${endpoint} response`, {
     status: response.status,
@@ -49,7 +49,7 @@ export const logOAuthResponse = (
 export const logOAuthError = (
   endpoint: string,
   error: Error | unknown,
-  context?: Record<string, any>
+  context?: Record<string, unknown>
 ) => {
   console.error(`[OAuth] ${endpoint} error`, {
     error: error instanceof Error ? {

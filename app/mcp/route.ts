@@ -14,6 +14,20 @@ import {
   createSubscriptionRequiredResponse,
   createPlaidRequiredResponse,
 } from "@/lib/utils/auth-responses";
+import {
+  createSuccessResponse,
+  createErrorResponse,
+} from "@/lib/utils/mcp-response-helpers";
+import { createTextContent } from "@/lib/types/mcp-responses";
+import type {
+  AccountBalancesResponse,
+  TransactionsResponse,
+  SpendingInsightsResponse,
+  AccountHealthResponse,
+  FinancialTipsResponse,
+  BudgetCalculationResponse,
+  MessageResponse,
+} from "@/lib/types/tool-responses";
 import { withMcpAuth } from "better-auth/plugins";
 import { baseURL } from "@/baseUrl";
 import { logOAuthRequest, logOAuthError } from "@/lib/auth/oauth-logger";
@@ -26,9 +40,8 @@ const getAppsSdkCompatibleHtml = async (baseUrl: string, path: string) => {
   return await result.text();
 };
 
-// Type for OpenAI-extended MCP tool configurations
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ExtendedToolConfig = any;
+// Note: securitySchemes is required by OpenAI Apps SDK spec but not yet in MCP SDK types
+// We use @ts-expect-error to suppress these known type mismatches
 
 const handler = withMcpAuth(auth, async (req, session) => {
   // Detailed session logging
@@ -141,7 +154,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
         readOnlyHint: true,
       },
       securitySchemes: [{ type: "oauth2" }],
-    } as any;
+    };
 
     console.log("[MCP] Registering tool: get_account_balances", {
       securitySchemes: getAccountBalancesConfig.securitySchemes,
@@ -165,8 +178,9 @@ const handler = withMcpAuth(auth, async (req, session) => {
           openWorldHint: false,
           readOnlyHint: true,
         },
-      securitySchemes: [{ type: "noauth" }, { type: "oauth2", scopes: ["balances:read"] }],
-    } as ExtendedToolConfig,
+        // @ts-expect-error - securitySchemes not yet in MCP SDK types
+        securitySchemes: [{ type: "noauth" }, { type: "oauth2", scopes: ["balances:read"] }],
+      },
     async () => {
       try {
         if (!session || !(await hasActiveSubscription(session.userId))) {
@@ -191,32 +205,19 @@ const handler = withMcpAuth(auth, async (req, session) => {
           return sum + (account.balances.current || 0);
         }, 0);
 
-        const output = {
-          accounts: allAccounts,
-          totalBalance,
-          lastUpdated: new Date().toISOString(),
-        };
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Found ${allAccounts.length} account(s) with a total balance of $${totalBalance.toFixed(2)}`,
-            },
-          ],
-          structuredContent: output,
-        };
+        return createSuccessResponse(
+          `Found ${allAccounts.length} account(s) with a total balance of $${totalBalance.toFixed(2)}`,
+          {
+            accounts: allAccounts,
+            totalBalance,
+            lastUpdated: new Date().toISOString(),
+          }
+        );
       } catch (error) {
         console.error("[Tool] get_account_balances error", { error });
-        return {
-          content: [
-            {
-              type: "text",
-              text: error instanceof Error ? error.message : "Failed to fetch account balances",
-            },
-          ],
-          isError: true,
-        };
+        return createErrorResponse(
+          error instanceof Error ? error.message : "Failed to fetch account balances"
+        );
       }
     }
   );
@@ -243,8 +244,9 @@ const handler = withMcpAuth(auth, async (req, session) => {
         openWorldHint: false,
         readOnlyHint: true,
       },
+      // @ts-expect-error - securitySchemes not yet in MCP SDK types
       securitySchemes: [{ type: "noauth" }, { type: "oauth2", scopes: ["transactions:read"] }],
-    } as ExtendedToolConfig,
+    },
     async ({ startDate, endDate, limit }: { startDate?: string; endDate?: string; limit?: number }) => {
       try {
         if (!session || !(await hasActiveSubscription(session.userId))) {
@@ -272,32 +274,19 @@ const handler = withMcpAuth(auth, async (req, session) => {
         allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         const limitedTransactions = allTransactions.slice(0, limit || 100);
 
-        const output = {
-          transactions: limitedTransactions,
-          totalTransactions: allTransactions.length,
-          dateRange: { start, end },
-        };
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Found ${allTransactions.length} transaction(s) from ${start} to ${end}`,
-            },
-          ],
-          structuredContent: output,
-        };
+        return createSuccessResponse(
+          `Found ${allTransactions.length} transaction(s) from ${start} to ${end}`,
+          {
+            transactions: limitedTransactions,
+            totalTransactions: allTransactions.length,
+            dateRange: { start, end },
+          }
+        );
       } catch (error) {
         console.error("[Tool] get_transactions error", { error });
-        return {
-          content: [
-            {
-              type: "text",
-              text: error instanceof Error ? error.message : "Failed to fetch transactions",
-            },
-          ],
-          isError: true,
-        };
+        return createErrorResponse(
+          error instanceof Error ? error.message : "Failed to fetch transactions"
+        );
       }
     }
   );
@@ -323,8 +312,9 @@ const handler = withMcpAuth(auth, async (req, session) => {
         openWorldHint: false,
         readOnlyHint: true,
       },
+      // @ts-expect-error - securitySchemes not yet in MCP SDK types
       securitySchemes: [{ type: "noauth" }, { type: "oauth2", scopes: ["insights:read"] }],
-    } as ExtendedToolConfig,
+    },
     async ({ startDate, endDate }: { startDate?: string; endDate?: string }) => {
       try {
         if (!session || !(await hasActiveSubscription(session.userId))) {
@@ -379,26 +369,15 @@ const handler = withMcpAuth(auth, async (req, session) => {
           dateRange: { start, end },
         };
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Total spending: $${totalSpending.toFixed(2)} across ${categories.length} categories from ${start} to ${end}`,
-            },
-          ],
-          structuredContent: output,
-        };
+        return createSuccessResponse(
+          `Total spending: $${totalSpending.toFixed(2)} across ${categories.length} categories from ${start} to ${end}`,
+          output
+        );
       } catch (error) {
         console.error("[Tool] get_spending_insights error", { error });
-        return {
-          content: [
-            {
-              type: "text",
-              text: error instanceof Error ? error.message : "Failed to analyze spending",
-            },
-          ],
-          isError: true,
-        };
+        return createErrorResponse(
+          error instanceof Error ? error.message : "Failed to analyze spending"
+        );
       }
     }
   );
@@ -421,8 +400,9 @@ const handler = withMcpAuth(auth, async (req, session) => {
         openWorldHint: false,
         readOnlyHint: true,
       },
+      // @ts-expect-error - securitySchemes not yet in MCP SDK types
       securitySchemes: [{ type: "noauth" }, { type: "oauth2", scopes: ["health:read"] }],
-    } as ExtendedToolConfig,
+    },
     async () => {
       try {
         if (!session) {
@@ -471,26 +451,15 @@ const handler = withMcpAuth(auth, async (req, session) => {
             ? "All accounts are in good standing."
             : `${totalWarnings} warning(s) detected across ${output.summary.accountsWithWarnings} account(s).`;
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: `${statusEmoji} ${statusText}\n\nChecked ${allAccounts.length} account(s).`,
-            },
-          ],
-          structuredContent: output,
-        };
+        return createSuccessResponse(
+          `${statusEmoji} ${statusText}\n\nChecked ${allAccounts.length} account(s).`,
+          output
+        );
       } catch (error) {
         console.error("[Tool] check_account_health error", { error });
-        return {
-          content: [
-            {
-              type: "text",
-              text: error instanceof Error ? error.message : "Failed to check account health",
-            },
-          ],
-          isError: true,
-        };
+        return createErrorResponse(
+          error instanceof Error ? error.message : "Failed to check account health"
+        );
       }
     }
   );
@@ -507,20 +476,16 @@ const handler = withMcpAuth(auth, async (req, session) => {
         _meta: {
           // Widget template removed until implemented
         },
+        // @ts-expect-error - securitySchemes not yet in MCP SDK types
         securitySchemes: [{ type: "noauth" }],
-      } as ExtendedToolConfig,
+      },
       async () => {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Hello from the test widget!",
-            },
-          ],
-          structuredContent: {
+        return createSuccessResponse(
+          "Hello from the test widget!",
+          {
             message: "Hello from the test widget!",
-          },
-        };
+          }
+        );
       }
     );
 
@@ -544,20 +509,16 @@ const handler = withMcpAuth(auth, async (req, session) => {
         _meta: {
           // Widget template removed until implemented
         },
+        // @ts-expect-error - securitySchemes not yet in MCP SDK types
         securitySchemes: [{ type: "noauth" }],
-      } as ExtendedToolConfig,
+      },
       async () => {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "Advanced test widget loaded.",
-            },
-          ],
-          structuredContent: {
+        return createSuccessResponse(
+          "Advanced test widget loaded.",
+          {
             message: "Initial message",
-          },
-        };
+          }
+        );
       }
     );
 
@@ -569,20 +530,17 @@ const handler = withMcpAuth(auth, async (req, session) => {
         inputSchema: {
           current_count: z.number(),
         },
+        // @ts-expect-error - securitySchemes not yet in MCP SDK types
         securitySchemes: [{ type: "noauth" }],
-      } as ExtendedToolConfig,
-      async ({ current_count }) => {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `The count is ${current_count}.`,
-            },
-          ],
-          structuredContent: {
+      },
+      async (args: Record<string, unknown>) => {
+        const { current_count } = args as { current_count: number };
+        return createSuccessResponse(
+          `The count is ${current_count}.`,
+          {
             message: `The count from the tool call is ${current_count}.`,
-          },
-        };
+          }
+        );
       }
     );
   // ============================================================================
@@ -617,8 +575,9 @@ const handler = withMcpAuth(auth, async (req, session) => {
         openWorldHint: false,
         readOnlyHint: true,
       },
+      // @ts-expect-error - securitySchemes not yet in MCP SDK types
       securitySchemes: [{ type: "noauth" }],
-    } as ExtendedToolConfig,
+    },
     async ({ topic = "general" }: { topic?: string }) => {
       // Educational financial tips organized by topic
       const tipsByTopic: Record<string, Array<{ title: string; description: string; category: string }>> = {
@@ -768,15 +727,10 @@ const handler = withMcpAuth(auth, async (req, session) => {
         ],
       };
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Here are ${tips.length} financial tips for ${topic}:\n\n${tips.map((tip, i) => `${i + 1}. **${tip.title}**: ${tip.description}`).join("\n\n")}`,
-          },
-        ],
-        structuredContent: output,
-      };
+      return createSuccessResponse(
+        `Here are ${tips.length} financial tips for ${topic}:\n\n${tips.map((tip, i) => `${i + 1}. **${tip.title}**: ${tip.description}`).join("\n\n")}`,
+        output
+      );
     }
   );
 
@@ -803,9 +757,11 @@ const handler = withMcpAuth(auth, async (req, session) => {
         openWorldHint: false,
         readOnlyHint: true,
       },
+      // @ts-expect-error - securitySchemes not yet in MCP SDK types
       securitySchemes: [{ type: "noauth" }],
-    } as ExtendedToolConfig,
-    async ({ monthlyIncome, hasDebts = false }) => {
+    },
+    async (args: Record<string, unknown>) => {
+      const { monthlyIncome, hasDebts = false } = args as { monthlyIncome: number; hasDebts?: boolean };
       // Standard 50/30/20 rule
       let needsPercent = 50;
       let wantsPercent = 30;
@@ -847,21 +803,15 @@ const handler = withMcpAuth(auth, async (req, session) => {
         recommendations,
       };
 
-      return {
-        content: [
-          {
-            type: "text",
-            text:
-            `Budget breakdown for $${monthlyIncome.toFixed(2)}/month:\n\n` +
-            `💰 Needs: $${needs.toFixed(2)} (${needsPercent}%)\n` +
-            `🎯 Wants: $${wants.toFixed(2)} (${wantsPercent}%)\n` +
-            `📈 Savings: $${savings.toFixed(2)} (${savingsPercent}%)\n` +
-            (hasDebts ? `💳 Debt Payment: $${debt.toFixed(2)} (${debtPercent}%)\n` : "") +
-            `\n${recommendations.join("\n")}`,
-          },
-        ],
-        structuredContent: output,
-      };
+      return createSuccessResponse(
+        `Budget breakdown for $${monthlyIncome.toFixed(2)}/month:\n\n` +
+        `💰 Needs: $${needs.toFixed(2)} (${needsPercent}%)\n` +
+        `🎯 Wants: $${wants.toFixed(2)} (${wantsPercent}%)\n` +
+        `📈 Savings: $${savings.toFixed(2)} (${savingsPercent}%)\n` +
+        (hasDebts ? `💳 Debt Payment: $${debt.toFixed(2)} (${debtPercent}%)\n` : "") +
+        `\n${recommendations.join("\n")}`,
+        output
+      );
     }
   );
 
@@ -882,7 +832,7 @@ const wrappedHandler = async (req: Request) => {
         const parsed = JSON.parse(body);
         isToolsList = parsed.method === 'tools/list';
       }
-    } catch (e) {
+    } catch  {
       // Ignore parsing errors
     }
 
@@ -920,7 +870,7 @@ const wrappedHandler = async (req: Request) => {
               console.log('[MCP] tools/list response (after patching):', {
                 toolCount: data.result.tools.length,
                 wasPatched,
-                tools: data.result.tools.map((t: any) => ({
+                tools: data.result.tools.map((t: { name: string; securitySchemes?: unknown; _meta?: { securitySchemes?: unknown } }) => ({
                   name: t.name,
                   hasSecuritySchemes: !!t.securitySchemes,
                   hasMetaSecuritySchemes: !!t._meta?.securitySchemes,

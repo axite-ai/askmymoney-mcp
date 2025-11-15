@@ -6,6 +6,10 @@ This guide helps agents contribute to AskMyMoney's ChatGPT-ready Next.js repo co
 - `app/` holds Next.js routes; `app/mcp/route.ts` exposes MCP tools/resources consumed by ChatGPT.
 - `lib/` centralizes auth, config, services, and shared types; prefer importing from here over duplicating logic.
   - `lib/db/` contains Drizzle ORM setup: `index.ts` exports db instance and pool, `schema.ts` defines all tables
+  - `lib/types/` contains TypeScript type definitions:
+    - `mcp-responses.ts` - Core MCP response types (MCPContent, MCPToolResponse, OpenAIResponseMetadata)
+    - `tool-responses.ts` - Application-specific structured content types for each tool
+  - `lib/utils/mcp-response-helpers.ts` - Type-safe helper functions for creating MCP tool responses
 - `widgets/` serves static HTML widgets for iframe rendering; keep assets self-contained with inline styles only.
 - Operational scripts live in `scripts/`; Drizzle migrations are in `drizzle/`. Static assets belong in `public/`.
 
@@ -25,6 +29,44 @@ This guide helps agents contribute to AskMyMoney's ChatGPT-ready Next.js repo co
 - Components/hooks use `PascalCase` / `camelCase`; route segments stay `kebab-case`.
 - Co-locate feature logic under `app/<feature>` directories and share utilities through `lib`.
 - Run `pnpm lint` to auto-fix formatting and keep Tailwind classes aligned with existing patterns.
+
+### MCP Tool Response Pattern
+When creating MCP tool handlers, always use the type-safe response helpers:
+
+```typescript
+// Import helpers
+import { createSuccessResponse, createErrorResponse } from "@/lib/utils/mcp-response-helpers";
+import { createSubscriptionRequiredResponse } from "@/lib/utils/auth-responses";
+
+// Define structured content type in lib/types/tool-responses.ts first
+server.registerTool("tool_name", config, async ({ param }) => {
+  try {
+    // Auth checks
+    if (!session || !(await hasActiveSubscription(session.userId))) {
+      return createSubscriptionRequiredResponse("feature name", session?.userId);
+    }
+
+    // Business logic
+    const data = await fetchData(param);
+
+    // Type-safe response
+    return createSuccessResponse(
+      "Human-readable message",
+      { /* structured content matching your defined type */ }
+    );
+  } catch (error) {
+    return createErrorResponse(
+      error instanceof Error ? error.message : "Operation failed"
+    );
+  }
+});
+```
+
+**Key principles:**
+- Never manually construct `{ type: "text", text: "..." }` objects - use `createTextContent()` or response helpers
+- Always define structured content types in `lib/types/tool-responses.ts` before implementing tools
+- Use literal types (`type: "text"` not `type: string`) - helpers handle this automatically
+- Follow three-tier auth: session → subscription → Plaid (if needed)
 
 ## Testing Guidelines
 - There is no bundled unit runner yet; always run `pnpm lint` and `pnpm typecheck` before committing.

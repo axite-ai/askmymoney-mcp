@@ -41,6 +41,54 @@ pnpm db:schema       # Regenerate schema from Better Auth config
 
 ## Architecture
 
+### Type System for MCP Responses
+
+The project uses a comprehensive, type-safe system for MCP tool responses based on the OpenAI Apps SDK specification:
+
+**Core Type Files:**
+- `lib/types/mcp-responses.ts` - Base MCP types (`MCPContent`, `MCPToolResponse`, `OpenAIResponseMetadata`)
+- `lib/types/tool-responses.ts` - Application-specific structured content types
+- `lib/utils/mcp-response-helpers.ts` - Helper functions for creating responses
+
+**Key Features:**
+- Type-safe content creation with literal types (`type: "text"` not `type: string`)
+- Proper OpenAI metadata typing for widget configuration
+- Helper functions that eliminate boilerplate:
+  - `createSuccessResponse(text, structuredContent, meta?)` - Standard success responses
+  - `createErrorResponse(message, meta?)` - Error responses
+  - `createTextContent(text, meta?)` - Individual text content items
+
+**Example Usage in MCP Tools:**
+```typescript
+// Import helpers and types
+import { createSuccessResponse, createErrorResponse } from "@/lib/utils/mcp-response-helpers";
+import type { AccountBalancesResponse } from "@/lib/types/tool-responses";
+
+// In your tool handler
+server.registerTool("get_account_balances", config, async () => {
+  try {
+    const data = await fetchAccountData();
+
+    // Type-safe success response
+    return createSuccessResponse(
+      `Found ${data.accounts.length} accounts`,
+      {
+        accounts: data.accounts,
+        totalBalance: data.total,
+        lastUpdated: new Date().toISOString()
+      }
+    );
+  } catch (error) {
+    // Type-safe error response
+    return createErrorResponse(
+      error instanceof Error ? error.message : "Failed to fetch balances"
+    );
+  }
+});
+```
+
+All tool responses automatically include proper `content` arrays with correctly typed content items, making them compatible with the MCP SDK while maintaining type safety.
+
 ### MCP Server (`app/mcp/route.ts`)
 
 The core of the application. Registers financial tools that ChatGPT can invoke:
@@ -118,20 +166,121 @@ Auto-detected in Vercel: `VERCEL_URL`, `VERCEL_PROJECT_PRODUCTION_URL`
 
 When adding new tools to `app/mcp/route.ts`:
 
-1. Register via `server.registerTool(name, config, handler)`
-2. Define `inputSchema` with Zod validation
-3. Add OpenAI metadata for widget rendering:
-   ```typescript
-   _meta: {
-     "openai/outputTemplate": "ui://widget/your-widget.html",
-     "openai/toolInvocation/invoking": "Loading message...",
-     "openai/toolInvocation/invoked": "Success message",
-     "openai/widgetAccessible": true/false,
-     "openai/resultCanProduceWidget": true/false,
-   }
-   ```
-4. For authenticated tools, add `securitySchemes: [{ type: "oauth2" }]` and implement the three-tier auth check
-5. Return structured content with `structuredContent` field for widget consumption
+### 1. Define Structured Content Type
+
+First, add your tool's structured content type to `lib/types/tool-responses.ts`:
+
+```typescript
+// Define the shape of data your tool returns
+export interface YourFeatureContent {
+  data: string[];
+  count: number;
+  timestamp: string;
+}
+
+// Create a response type alias for convenience
+export type YourFeatureResponse = MCPToolResponse<
+  YourFeatureContent,
+  OpenAIResponseMetadata
+>;
+```
+
+### 2. Register the Tool
+
+```typescript
+import { createSuccessResponse, createErrorResponse } from "@/lib/utils/mcp-response-helpers";
+
+server.registerTool(
+  "your_tool_name",
+  {
+    title: "Your Tool Title",
+    description: "What this tool does",
+    inputSchema: {
+      param1: z.string().describe("First parameter"),
+      param2: z.number().optional().describe("Optional parameter"),
+    },
+    _meta: {
+      "openai/outputTemplate": "ui://widget/your-widget.html",
+      "openai/toolInvocation/invoking": "Loading...",
+      "openai/toolInvocation/invoked": "Complete!",
+      "openai/widgetAccessible": false,
+    },
+    annotations: {
+      readOnlyHint: true,  // or false if it modifies data
+      destructiveHint: false,
+      openWorldHint: false,
+    },
+    securitySchemes: [{ type: "oauth2", scopes: ["feature:read"] }],
+  },
+  async ({ param1, param2 }) => {
+    try {
+      // Auth checks
+      if (!session || !(await hasActiveSubscription(session.userId))) {
+        return createSubscriptionRequiredResponse("your feature", session?.userId);
+      }
+
+      // Business logic
+      const result = await yourBusinessLogic(param1, param2);
+
+      // Type-safe response using helper
+      return createSuccessResponse(
+        `Processed ${result.count} items`,
+        {
+          data: result.data,
+          count: result.count,
+          timestamp: new Date().toISOString()
+        }
+      );
+    } catch (error) {
+      return createErrorResponse(
+        error instanceof Error ? error.message : "Operation failed"
+      );
+    }
+  }
+);
+```
+
+### 3. Response Helper Reference
+
+**Available helpers:**
+- `createSuccessResponse(text, structuredContent, meta?)` - Standard success with data
+- `createErrorResponse(message, meta?)` - Error responses
+- `createSubscriptionRequiredResponse(featureName, userId)` - Subscription paywall (from `lib/utils/auth-responses.ts`)
+- `createPlaidRequiredResponse(userId, headers)` - Plaid connection required (from `lib/utils/auth-responses.ts`)
+- `createLoginPromptResponse(featureName?)` - Login required (from `lib/utils/auth-responses.ts`)
+
+**Individual content helpers:**
+- `createTextContent(text, meta?)` - Text content item
+- `createImageContent(data, mimeType, meta?)` - Image content item
+- `createResourceContent(uri, content, meta?)` - Resource content item
+
+### 4. Three-Tier Auth Pattern
+
+For tools requiring authentication:
+
+```typescript
+// 1. Check OAuth session
+if (!session) {
+  return createLoginPromptResponse("feature name");
+}
+
+// 2. Check active subscription
+if (!(await hasActiveSubscription(session.userId))) {
+  return createSubscriptionRequiredResponse("feature name", session.userId);
+}
+
+// 3. Check Plaid connection (if needed)
+const accessTokens = await UserService.getUserAccessTokens(session.userId);
+if (accessTokens.length === 0) {
+  return await createPlaidRequiredResponse(session.userId, req.headers);
+}
+```
+
+All response helpers ensure:
+- Correct literal types (`type: "text"` not `type: string`)
+- Proper OpenAI metadata structure
+- MCP SDK compatibility
+- Type safety throughout
 
 ### Creating Stripe Checkout Sessions from MCP Tools or Server Actions
 
