@@ -133,12 +133,12 @@ export default function ConnectBankPage() {
               You can now return to ChatGPT and ask about your account balances,
               transactions, and spending insights.
             </p>
-            <a
-              href="https://chatgpt.com"
+            <button
+              onClick={() => window.close()}
               className="inline-block bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold py-3 px-6 rounded-lg transition-all shadow-lg"
             >
               Return to ChatGPT
-            </a>
+            </button>
           </div>
         </div>
       </div>
