@@ -1,12 +1,15 @@
-import 'server-only'
-
+import { db } from '@/lib/db';
+import { plaidItems, plaidAccounts, plaidTransactions } from '@/lib/db/schema';
+import { eq, sql, inArray, and, gte, lte } from 'drizzle-orm';
 import { getPlaidClient } from '../config/plaid';
+import { EncryptionService } from './encryption-service';
 import {
   CountryCode,
   Products,
   AccountsGetRequest,
-  TransactionsGetRequest,
   TransactionsSyncRequest,
+  RemovedTransaction,
+  Transaction,
   TransactionsRecurringGetRequest,
   AuthGetRequest,
   InvestmentsHoldingsGetRequest,
@@ -93,23 +96,39 @@ export async function getAccountBalances(accessToken: string) {
  * @param endDate End date (YYYY-MM-DD)
  * @returns Transactions and accounts
  */
-export async function getTransactions(accessToken: string, startDate: string, endDate: string) {
-  const request: TransactionsGetRequest = {
-    access_token: accessToken,
-    start_date: startDate,
-    end_date: endDate,
-    options: {
-      count: 100,
-      offset: 0,
-    },
-  };
+/**
+ * Fetches transaction updates from Plaid for a given item.
+ * @param accessToken The access token for the item.
+ * @param initialCursor The last stored cursor for the item.
+ * @returns An object containing added, modified, and removed transactions, plus the next cursor.
+ */
+async function fetchTransactionUpdates(accessToken: string, initialCursor: string | null) {
+  let cursor = initialCursor;
+  const added: Transaction[] = [];
+  const modified: Transaction[] = [];
+  const removed: RemovedTransaction[] = [];
+  let hasMore = true;
+
   try {
-    const response = await getPlaidClient().transactionsGet(request);
-    return response.data;
-  } catch (error: unknown) {
-    const plaidError = error as { response?: { data?: { error_message?: string } } };
-    console.error('Error getting transactions:', plaidError.response?.data);
-    throw new Error(`Failed to get transactions: ${plaidError.response?.data?.error_message || 'Unknown error'}`);
+    while (hasMore) {
+      const response = await getPlaidClient().transactionsSync({
+        access_token: accessToken,
+        cursor: cursor ?? undefined,
+        count: 500, // Max count
+      });
+
+      const { data } = response;
+      added.push(...data.added);
+      modified.push(...data.modified);
+      removed.push(...data.removed);
+      hasMore = data.has_more;
+      cursor = data.next_cursor;
+    }
+    return { added, modified, removed, nextCursor: cursor };
+  } catch (error) {
+    console.error(`Error fetching transactions for access token ${accessToken}:`, error);
+    // Return what we have so far, but don't update the cursor
+    return { added, modified, removed, nextCursor: initialCursor };
   }
 }
 
@@ -120,19 +139,154 @@ export async function getTransactions(accessToken: string, startDate: string, en
  * @param endDate End date (YYYY-MM-DD)
  * @returns Spending analysis by category
  */
-export async function getSpendingInsights(accessToken: string, startDate: string, endDate: string) {
+export async function syncTransactionsForItem(itemId: string) {
   try {
-    const { transactions } = await getTransactions(accessToken, startDate, endDate);
+    // 1. Get the item from the database
+    const item = await db.query.plaidItems.findFirst({
+      where: eq(plaidItems.itemId, itemId),
+    });
+
+    if (!item) {
+      throw new Error(`Item with ID ${itemId} not found.`);
+    }
+
+    // Decrypt access token
+    const accessToken = EncryptionService.decrypt(item.accessToken);
+
+    // 2. Fetch all available accounts for the item
+    const accountsResponse = await getPlaidClient().accountsGet({ access_token: accessToken });
+    const accounts = accountsResponse.data.accounts;
+
+    // 3. Upsert accounts into the database
+    await db.insert(plaidAccounts)
+      .values(accounts.map(acc => ({
+        accountId: acc.account_id,
+        itemId: item.itemId,
+        userId: item.userId,
+        name: acc.name,
+        mask: acc.mask,
+        officialName: acc.official_name,
+        currentBalance: acc.balances.current?.toString(),
+        availableBalance: acc.balances.available?.toString(),
+        isoCurrencyCode: acc.balances.iso_currency_code,
+        type: acc.type,
+        subtype: acc.subtype,
+        persistentAccountId: acc.persistent_account_id,
+      })))
+      .onConflictDoUpdate({
+        target: plaidAccounts.accountId,
+        set: {
+          currentBalance: sql`excluded.current_balance`,
+          availableBalance: sql`excluded.available_balance`,
+          updatedAt: new Date(),
+        }
+      });
+
+    // 4. Fetch transaction updates
+    const { added, modified, removed, nextCursor } = await fetchTransactionUpdates(accessToken, item.transactionsCursor);
+
+    // 5. Process updates
+    if (removed.length > 0) {
+      await db.delete(plaidTransactions).where(inArray(plaidTransactions.transactionId, removed.map(t => t.transaction_id)));
+    }
+
+    const transactionsToUpsert = [...added, ...modified];
+    if (transactionsToUpsert.length > 0) {
+      await db.insert(plaidTransactions)
+        .values(transactionsToUpsert.map(t => ({
+          transactionId: t.transaction_id,
+          accountId: t.account_id,
+          userId: item.userId,
+          amount: t.amount.toString(),
+          isoCurrencyCode: t.iso_currency_code,
+          unofficialCurrencyCode: t.unofficial_currency_code,
+          categoryPrimary: t.personal_finance_category?.primary,
+          categoryDetailed: t.personal_finance_category?.detailed,
+          categoryConfidence: t.personal_finance_category?.confidence_level,
+          checkNumber: t.check_number,
+          date: new Date(t.date),
+          datetime: t.datetime ? new Date(t.datetime) : null,
+          authorizedDate: t.authorized_date ? new Date(t.authorized_date) : null,
+          authorizedDatetime: t.authorized_datetime ? new Date(t.authorized_datetime) : null,
+          location: t.location,
+          merchantName: t.merchant_name,
+          paymentChannel: t.payment_channel,
+          pending: t.pending,
+          pendingTransactionId: t.pending_transaction_id,
+          transactionCode: t.transaction_code,
+          name: t.name,
+          originalDescription: t.original_description,
+          logoUrl: t.logo_url,
+          website: t.website,
+          counterparties: t.counterparties,
+          paymentMeta: t.payment_meta,
+          rawData: t,
+        })))
+        .onConflictDoUpdate({
+          target: plaidTransactions.transactionId,
+          set: {
+            amount: sql`excluded.amount`,
+            categoryPrimary: sql`excluded.category_primary`,
+            categoryDetailed: sql`excluded.category_detailed`,
+            pending: sql`excluded.pending`,
+            merchantName: sql`excluded.merchant_name`,
+            paymentChannel: sql`excluded.payment_channel`,
+            updatedAt: new Date(),
+            rawData: sql`excluded.raw_data`,
+          }
+        });
+    }
+
+    // 6. Update the cursor in the database
+    await db.update(plaidItems)
+      .set({ transactionsCursor: nextCursor, updatedAt: new Date() })
+      .where(eq(plaidItems.itemId, itemId));
+
+    return {
+      added: added.length,
+      modified: modified.length,
+      removed: removed.length,
+    };
+
+  } catch (error) {
+    console.error(`Failed to sync transactions for item ${itemId}:`, error);
+    throw new Error(`Failed to sync transactions: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+export async function getSpendingInsights(userId: string, startDate: string, endDate: string) {
+  try {
+    const userAccountIds = (await db.query.plaidAccounts.findMany({
+      where: eq(plaidAccounts.userId, userId)
+    })).map(acc => acc.accountId);
+
+    if (userAccountIds.length === 0) {
+      return {
+        totalSpending: 0,
+        categoryBreakdown: [],
+        transactionCount: 0,
+        dateRange: { startDate, endDate },
+      };
+    }
+
+    const transactions = await db.query.plaidTransactions.findMany({
+      where: and(
+        inArray(plaidTransactions.accountId, userAccountIds),
+        gte(plaidTransactions.date, new Date(startDate)),
+        lte(plaidTransactions.date, new Date(endDate))
+      )
+    });
 
     // Group transactions by category and calculate totals
     const categoryTotals = new Map<string, number>();
     let totalSpending = 0;
 
     for (const tx of transactions) {
-      if (tx.amount > 0 && !tx.pending) { // Only count expenses (positive amounts)
-        const category = tx.category?.[0] || 'Uncategorized';
-        categoryTotals.set(category, (categoryTotals.get(category) || 0) + tx.amount);
-        totalSpending += tx.amount;
+      const amount = parseFloat(tx.amount);
+      if (amount > 0 && !tx.pending) { // Only count expenses (positive amounts)
+        const category = tx.categoryPrimary || 'Uncategorized';
+        categoryTotals.set(category, (categoryTotals.get(category) || 0) + amount);
+        totalSpending += amount;
       }
     }
 

@@ -98,6 +98,7 @@ export default function Transactions() {
   const [showPendingOnly, setShowPendingOnly] = useState(false);
   const [expandedTx, setExpandedTx] = useState<string | null>(null);
   const [showAllDates, setShowAllDates] = useState(false);
+  const [expandedDateGroups, setExpandedDateGroups] = useState<Set<string>>(new Set());
 
   // Type guard for TransactionsData
   const toolOutput = rawOutput as unknown as TransactionsData | null | undefined;
@@ -443,7 +444,7 @@ export default function Transactions() {
                 {/* Transaction Cards */}
                 <div className="space-y-2">
                   <AnimatePresence mode="popLayout">
-                    {(isFullscreen ? txs : txs.slice(0, MAX_VISIBLE_INLINE)).map((tx, txIndex) => {
+                    {(isFullscreen || expandedDateGroups.has(date) ? txs : txs.slice(0, MAX_VISIBLE_INLINE)).map((tx, txIndex) => {
                       const isExpanded = expandedTx === tx.transaction_id;
                       const merchantName = tx.merchant_name || tx.name || "Unknown";
                       const category = tx.personal_finance_category?.primary || "UNCATEGORIZED";
@@ -694,12 +695,14 @@ export default function Transactions() {
                     })}
                   </AnimatePresence>
 
-                  {/* "+# more" indicator for inline mode */}
-                  {!isFullscreen && txs.length > MAX_VISIBLE_INLINE && (
+                  {/* "+# more" indicator for inline mode - expands this date group */}
+                  {!isFullscreen && !expandedDateGroups.has(date) && txs.length > MAX_VISIBLE_INLINE && (
                     <motion.button
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      onClick={() => window.openai?.requestDisplayMode({ mode: "fullscreen" })}
+                      onClick={() => {
+                        setExpandedDateGroups((prev) => new Set(prev).add(date));
+                      }}
                       className={cn(
                         "w-full flex items-center justify-center rounded-2xl border px-4 py-3 text-sm font-medium shadow-sm transition-all cursor-pointer",
                         isDark
@@ -714,12 +717,12 @@ export default function Transactions() {
               </div>
             ))}
 
-            {/* Show More Date Groups Button */}
+            {/* Show More Date Groups Button - opens fullscreen */}
             {!isFullscreen && !showAllDates && groupedTransactions.length > MAX_DATE_GROUPS_INLINE && (
               <motion.button
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                onClick={() => setShowAllDates(true)}
+                onClick={() => window.openai?.requestDisplayMode({ mode: "fullscreen" })}
                 className={cn(
                   "w-full flex items-center justify-center rounded-2xl border px-4 py-3 text-sm font-medium shadow-sm transition-all cursor-pointer",
                   isDark

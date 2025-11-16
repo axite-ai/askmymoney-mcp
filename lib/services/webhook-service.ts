@@ -9,6 +9,7 @@ import { Pool } from 'pg';
 import crypto from 'crypto';
 import { logger, LoggerService, AuditEventType } from './logger-service';
 import { UserService } from './user-service';
+import { syncTransactionsForItem } from './plaid-service';
 
 // Database pool
 const pool = new Pool({
@@ -284,19 +285,15 @@ export class WebhookService {
   ): Promise<void> {
     switch (webhook.webhook_code) {
       case 'SYNC_UPDATES_AVAILABLE':
-      case 'DEFAULT_UPDATE':
-        // New transactions available
-        logger.info('[Webhook] New transactions available', {
+        logger.info('[Webhook] SYNC_UPDATES_AVAILABLE received', {
           userId,
           itemId: webhook.item_id,
-          newTransactions: webhook.new_transactions,
         });
-
-        // Update last synced timestamp
-        // TODO: Implement updateLastSynced method or track sync time in plaid_items table
-        if (userId) {
-          console.log(`[Webhook] Transactions synced for user ${userId}, item ${webhook.item_id}`);
-          // await UserService.updateLastSynced(userId, webhook.item_id);
+        try {
+          await syncTransactionsForItem(webhook.item_id);
+          logger.info(`[Webhook] Successfully synced transactions for item ${webhook.item_id}`);
+        } catch (error) {
+          logger.error(`[Webhook] Error syncing transactions for item ${webhook.item_id}`, { error });
         }
         break;
 

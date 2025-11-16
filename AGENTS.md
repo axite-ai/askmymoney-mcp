@@ -69,11 +69,60 @@ server.registerTool("tool_name", config, async ({ param }) => {
 - Follow three-tier auth: session → subscription → Plaid (if needed)
 
 ## Testing Guidelines
-- There is no bundled unit runner yet; always run `pnpm lint` and `pnpm typecheck` before committing.
-- Add targeted tests when introducing infrastructure; name files `*.test.ts` or `*.spec.ts`.
-- Capture manual verification notes for MCP endpoints (`/mcp`) and subscription flows inside the PR description.
-- For database or auth changes, run `pnpm db:generate` then `pnpm db:migrate` against a disposable database and confirm schema diffs.
-- When modifying Better Auth config or adding plugins, run `pnpm db:schema` to regenerate the schema file.
+
+### Automated Testing
+The project uses **Vitest** for automated testing with a dedicated test environment:
+
+**Running Tests:**
+```bash
+pnpm test              # Run all tests
+pnpm test:integration  # Run integration tests only
+pnpm test:watch        # Run tests in watch mode
+pnpm test:coverage     # Generate coverage report
+```
+
+**Test Environment:**
+- Test config in `vitest.config.ts` loads `.env.test` for environment variables
+- Dedicated test database (`askmymoney_test`) created/dropped automatically via `tests/global-setup.ts`
+- Uses Drizzle ORM consistently (import `testDb` from `tests/test-db.ts`)
+- Integration tests in `tests/integration/`, mocks in `tests/mocks/`
+
+**Writing Tests:**
+```typescript
+import { testDb } from '../test-db';
+import { eq } from 'drizzle-orm';
+import { users } from '@/lib/db/schema';
+
+it('should create and query user', async () => {
+  await testDb.insert(users).values({ /* ... */ });
+  const result = await testDb.query.users.findFirst({ where: eq(users.id, 'user_123') });
+  expect(result).toBeDefined();
+});
+```
+
+**Current Test Status:**
+- ✅ 121 tests passing
+- ✅ All tests passing. The `should sync transactions for an item` test has been implemented.
+- 📚 See `docs/TESTING.md` for comprehensive guide
+
+**Testing TODOs:**
+- 📋 Refactor skipped test to use real test database or implement dependency injection for `syncTransactionsForItem`
+- 📋 Add unit tests for individual service methods (encryption, user service, subscription helpers)
+- 📋 Add E2E tests for complete MCP tool flows (auth → subscription → Plaid → tool execution)
+- 📋 Add widget rendering tests (consider using Playwright or Puppeteer)
+- 📋 Improve test database isolation using transactions for faster test execution
+- 📋 Add tests for error handling and edge cases in MCP tools
+
+**Pre-Commit Checklist:**
+- Run `pnpm test` to ensure all tests pass
+- Run `pnpm lint` to fix formatting
+- Run `pnpm typecheck` to verify types
+- Add tests for new features or bug fixes
+
+### Manual Testing
+- Capture manual verification notes for MCP endpoints (`/mcp`) and subscription flows in PR description
+- For database or auth changes, run `pnpm db:generate` then `pnpm db:migrate` against test database and confirm schema diffs
+- When modifying Better Auth config or adding plugins, run `pnpm db:schema` to regenerate the schema file
 
 ## Commit & Pull Request Guidelines
 - Follow Conventional Commits (`feat(subscription): hook up stripe subscriptions`) as seen in the Git history.

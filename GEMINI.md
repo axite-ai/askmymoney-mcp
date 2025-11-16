@@ -78,11 +78,72 @@ pnpm db:schema     # Regenerate schema from Better Auth config
 
 ## Testing
 
-The project includes type checking using TypeScript.
+### Automated Testing
+
+The project uses **Vitest** for automated testing with a comprehensive test setup:
 
 ```bash
-pnpm typecheck
+pnpm test              # Run all tests
+pnpm test:integration  # Run integration tests only
+pnpm test:watch        # Run tests in watch mode
+pnpm test:coverage     # Generate coverage report
+pnpm typecheck         # Type checking only
 ```
+
+**Test Environment Configuration:**
+- Test config: `vitest.config.ts` with Vite's `loadEnv('test', ...)` to load `.env.test`
+- Test database: `askmymoney_test` (created/migrated/dropped automatically)
+- Environment variables: `.env.test` contains safe defaults for testing (dummy API keys, test database)
+- Database operations: Uses Drizzle ORM (consistent with app code)
+
+**Test File Structure:**
+- `tests/global-setup.ts` - Global setup/teardown (database creation, migrations)
+- `tests/setup-files.ts` - Per-test-file setup (imports, console filtering)
+- `tests/test-db.ts` - Test database utilities (`testDb`, `testPool`, `closeTestDb()`)
+- `tests/integration/` - Integration tests with real database
+- `tests/mocks/` - Mock data for Plaid, Stripe, database
+
+**Writing Tests:**
+```typescript
+import { testDb } from '../test-db';
+import { eq } from 'drizzle-orm';
+import { users } from '@/lib/db/schema';
+
+describe('User Service', () => {
+  it('should create user', async () => {
+    await testDb.insert(users).values({
+      id: 'user_123',
+      email: 'test@example.com',
+      name: 'Test User',
+    });
+
+    const user = await testDb.query.users.findFirst({
+      where: eq(users.id, 'user_123')
+    });
+
+    expect(user).toBeDefined();
+    expect(user?.email).toBe('test@example.com');
+  });
+});
+```
+
+**Current Test Status:**
+- ✅ 121 tests passing
+- ⚠️ 1 test skipped: `should sync transactions for an item` (needs refactoring)
+- 📖 See `docs/TESTING.md` for comprehensive guide
+
+**Testing TODOs:**
+- 📋 Refactor skipped test: Modify `syncTransactionsForItem` to accept db instance or use real test database
+- 📋 Add unit tests for services (encryption, user service, subscription validation)
+- 📋 Add E2E tests for MCP tool flows (OAuth → subscription → Plaid → tool execution)
+- 📋 Add widget rendering tests (HTML/CSS validation, interactive behavior)
+- 📋 Improve test isolation with database transactions
+- 📋 Add comprehensive error handling tests for MCP tools
+
+**Pre-Commit Checklist:**
+- Run `pnpm test` to ensure tests pass
+- Run `pnpm typecheck` to verify TypeScript
+- Run `pnpm lint` to fix formatting issues
 
 ## Database Schema Notes
 
