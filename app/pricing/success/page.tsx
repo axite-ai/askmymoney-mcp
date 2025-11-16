@@ -85,17 +85,13 @@ export default function SubscriptionSuccessPage() {
           </div>
         </div>
 
-        {/* Close Window Button */}
+        {/* Return to ChatGPT Button */}
         <button
           onClick={() => window.close()}
           className="inline-block bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold py-3 px-6 rounded-lg transition-all"
         >
-          Close This Window
+          Return to ChatGPT
         </button>
-
-        <p className="text-xs text-gray-500 mt-4">
-          You can safely close this tab and return to ChatGPT
-        </p>
       </div>
     </div>
   );
