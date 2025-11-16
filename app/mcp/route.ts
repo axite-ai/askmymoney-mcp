@@ -3,12 +3,15 @@ import { z } from "zod";
 import type { AccountBase, LiabilitiesObject } from "plaid";
 import {
   getAccountBalances,
-  getTransactions,
   getSpendingInsights,
   checkAccountHealth,
   getInvestmentHoldings,
   getLiabilities,
+  syncTransactionsForItem,
 } from "@/lib/services/plaid-service";
+import { db } from "@/lib/db";
+import { plaidTransactions, plaidAccounts } from "@/lib/db/schema";
+import { and, gte, lte, eq as drizzleEq, inArray } from 'drizzle-orm';
 import { UserService } from "@/lib/services/user-service";
 import { auth } from "@/lib/auth";
 import { hasActiveSubscription } from "@/lib/utils/subscription-helpers";
@@ -285,12 +288,25 @@ const handler = withMcpAuth(auth, async (req, session) => {
         const end = endDate || new Date().toISOString().split("T")[0];
         const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-        // Fetch transactions from all accounts
-        const allTransactions = [];
-        for (const accessToken of accessTokens) {
-          const result = await getTransactions(accessToken, start, end);
-          allTransactions.push(...result.transactions);
+        // Sync transactions for all items to ensure data is fresh
+        const userItems = await UserService.getUserPlaidItems(session.userId);
+        for (const item of userItems) {
+          await syncTransactionsForItem(item.itemId);
         }
+
+        // Get all account IDs for the user's items
+        const userAccountIds = (await db.query.plaidAccounts.findMany({
+          where: inArray(plaidAccounts.itemId, userItems.map(item => item.itemId))
+        })).map(acc => acc.accountId);
+
+        // Fetch transactions from the local database
+        const allTransactions = await db.query.plaidTransactions.findMany({
+          where: and(
+            inArray(plaidTransactions.accountId, userAccountIds),
+            gte(plaidTransactions.date, new Date(start)),
+            lte(plaidTransactions.date, new Date(end))
+          )
+        });
 
         // Apply filters
         let filteredTransactions = allTransactions;
@@ -303,21 +319,21 @@ const handler = withMcpAuth(auth, async (req, session) => {
         // Filter by category
         if (category) {
           filteredTransactions = filteredTransactions.filter(tx =>
-            tx.personal_finance_category?.primary === category
+            tx.categoryPrimary === category
           );
         }
 
         // Filter by payment channel
         if (paymentChannel) {
           filteredTransactions = filteredTransactions.filter(tx =>
-            tx.payment_channel === paymentChannel
+            tx.paymentChannel === paymentChannel
           );
         }
 
         // Sort by date (most recent first) and limit
         filteredTransactions.sort((a, b) => {
-          const dateA = new Date(a.authorized_date || a.date).getTime();
-          const dateB = new Date(b.authorized_date || b.date).getTime();
+          const dateA = new Date(a.authorizedDate || a.date).getTime();
+          const dateB = new Date(b.authorizedDate || b.date).getTime();
           return dateB - dateA;
         });
         const limitedTransactions = filteredTransactions.slice(0, limit || 100);
@@ -330,29 +346,30 @@ const handler = withMcpAuth(auth, async (req, session) => {
         let pendingCount = 0;
 
         for (const tx of limitedTransactions) {
+          const amount = parseFloat(tx.amount);
           // Category breakdown
-          const cat = tx.personal_finance_category?.primary || 'UNCATEGORIZED';
+          const cat = tx.categoryPrimary || 'UNCATEGORIZED';
           const catData = categoryBreakdown.get(cat) || { count: 0, total: 0 };
           categoryBreakdown.set(cat, {
             count: catData.count + 1,
-            total: catData.total + tx.amount
+            total: catData.total + amount
           });
 
           // Merchant breakdown
-          const merchantName = tx.merchant_name || tx.name || 'Unknown';
-          const merchantId = tx.merchant_entity_id || merchantName;
+          const merchantName = tx.merchantName || tx.name || 'Unknown';
+          const merchantId = merchantName; // No merchant_entity_id in our schema
           const merchData = merchantBreakdown.get(merchantId) || { name: merchantName, count: 0, total: 0 };
           merchantBreakdown.set(merchantId, {
             name: merchantName,
             count: merchData.count + 1,
-            total: merchData.total + tx.amount
+            total: merchData.total + amount
           });
 
           // Spending totals
-          if (tx.amount > 0) {
-            totalSpending += tx.amount;
+          if (amount > 0) {
+            totalSpending += amount;
           } else {
-            totalIncome += Math.abs(tx.amount);
+            totalIncome += Math.abs(amount);
           }
 
           if (tx.pending) {
@@ -390,7 +407,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
                 netCashFlow: totalIncome - totalSpending,
                 pendingCount,
                 averageTransaction: limitedTransactions.length > 0
-                  ? limitedTransactions.reduce((sum, tx) => sum + tx.amount, 0) / limitedTransactions.length
+                  ? limitedTransactions.reduce((sum, tx) => sum + parseFloat(tx.amount), 0) / limitedTransactions.length
                   : 0
               }
             }
@@ -444,47 +461,20 @@ const handler = withMcpAuth(auth, async (req, session) => {
         const end = endDate || new Date().toISOString().split("T")[0];
         const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-        // Get spending insights from all accounts
-        const allInsights = [];
-        for (const accessToken of accessTokens) {
-          const insights = await getSpendingInsights(accessToken, start, end);
-          allInsights.push(insights);
-        }
-
-        // Merge insights from multiple accounts
-        const categoryMap = new Map<string, { amount: number; count: number }>();
-        let totalSpending = 0;
-
-        for (const insights of allInsights) {
-          for (const cat of insights.categoryBreakdown) {
-            const existing = categoryMap.get(cat.category) || { amount: 0, count: 0 };
-            categoryMap.set(cat.category, {
-              amount: existing.amount + cat.amount,
-              count: existing.count + 1,
-            });
-            totalSpending += cat.amount;
-          }
-        }
-
-        // Convert to array and calculate percentages
-        const categories = Array.from(categoryMap.entries()).map(([name, data]) => ({
-          name,
-          amount: data.amount,
-          count: data.count,
-          percentage: totalSpending > 0 ? (data.amount / totalSpending) * 100 : 0,
-        }));
-
-        // Sort by amount (highest first)
-        categories.sort((a, b) => b.amount - a.amount);
+        const insights = await getSpendingInsights(session.userId, start, end);
 
         const output = {
-          categories,
-          totalSpending,
+          categories: insights.categoryBreakdown.map(c => ({
+            name: c.category,
+            amount: c.amount,
+            percentage: c.percentage,
+          })),
+          totalSpending: insights.totalSpending,
           dateRange: { start, end },
         };
 
         return createSuccessResponse(
-          `Total spending: $${totalSpending.toFixed(2)} across ${categories.length} categories from ${start} to ${end}`,
+          `Total spending: $${output.totalSpending.toFixed(2)} across ${output.categories.length} categories from ${start} to ${end}`,
           output
         );
       } catch (error) {

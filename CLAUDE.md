@@ -95,7 +95,7 @@ The core of the application. Registers financial tools that ChatGPT can invoke:
 
 **Authenticated Tools (require OAuth + subscription + Plaid connection):**
 - `get_account_balances` - Fetch account balances from all linked accounts
-- `get_transactions` - Retrieve recent transactions with date filtering
+- `get_transactions` - Retrieve recent transactions with date filtering (now syncs from local DB)
 - `get_spending_insights` - Analyze spending by category
 - `check_account_health` - Check for low balances, overdrafts, high credit utilization
 
@@ -121,7 +121,7 @@ Session data stored in PostgreSQL. Rate limiting and caching use Redis as second
 ### Data Layer
 
 **Services:**
-- `lib/services/plaid-service.ts` - All Plaid API interactions (balances, transactions, insights, health checks)
+- `lib/services/plaid-service.ts` - All Plaid API interactions (balances, transactions sync, insights, health checks)
 - `lib/services/user-service.ts` - Manages user-to-Plaid item mappings, encrypts/decrypts access tokens
 - `lib/services/encryption-service.ts` - AES-256-GCM encryption for Plaid tokens at rest
 - `lib/utils/subscription-helpers.ts` - Subscription status validation
@@ -369,6 +369,8 @@ Without `subscriptionId` in the metadata, webhooks will silently fail and subscr
 
 **Custom Application Tables:**
 - `plaid_items` - User-to-Plaid account mappings (access tokens encrypted)
+- `plaid_accounts` - Stores account-level data from Plaid
+- `plaid_transactions` - Stores transaction data synced from Plaid
 - `plaid_webhooks` - Plaid webhook event logs
 
 **Important:** Database columns use snake_case (e.g., `stripe_customer_id`, `reference_id`) while TypeScript properties use camelCase. When writing raw SQL queries, always use snake_case column names.
@@ -384,7 +386,55 @@ Designed for Vercel deployment. Base URL auto-detection via `baseUrl.ts` handles
 - Preview/branch URLs via `VERCEL_BRANCH_URL`
 - Local development fallback to `http://localhost:3000`
 
-## Testing MCP Integration
+## Testing
+
+### Automated Testing
+
+The project uses Vitest for automated testing with a dedicated test environment:
+
+**Test Commands:**
+```bash
+pnpm test              # Run all tests
+pnpm test:integration  # Run integration tests only
+pnpm test:watch        # Run tests in watch mode
+pnpm test:coverage     # Run tests with coverage report
+```
+
+**Test Configuration:**
+- Test environment configured in `vitest.config.ts`
+- Test-specific environment variables in `.env.test` (safe defaults, dummy API keys)
+- Dedicated test database (`askmymoney_test`) created/dropped automatically
+- Uses Drizzle ORM for database operations in tests (consistent with app code)
+
+**Test Files:**
+- `tests/global-setup.ts` - Database creation, migration, and teardown
+- `tests/setup-files.ts` - Per-test-file setup (imports, mocks)
+- `tests/test-db.ts` - Test database utilities (`testDb`, `testPool`, `closeTestDb()`)
+- `tests/integration/` - Integration tests with real database
+- `tests/mocks/` - Mock data for Plaid, Stripe, database
+
+**Writing Tests:**
+```typescript
+import { testDb } from '../test-db';
+import { users } from '@/lib/db/schema';
+
+it('should query test database', async () => {
+  const result = await testDb.select().from(users);
+  expect(result).toBeDefined();
+});
+```
+
+**Known Limitations & TODOs:**
+- ⚠️ One test skipped: `should sync transactions for an item` - needs refactoring to use real test database or dependency injection
+- ⚠️ Database permission warnings during teardown (harmless, doesn't affect test results)
+- 📋 TODO: Add unit tests for individual services (currently only integration tests exist)
+- 📋 TODO: Add E2E tests for MCP tool flows
+- 📋 TODO: Add tests for widget rendering
+- 📋 TODO: Improve test database isolation (consider using transactions for faster cleanup)
+
+See `docs/TESTING.md` for comprehensive testing guide.
+
+### Manual Testing - MCP Integration
 
 1. Run `pnpm dev` locally
 2. MCP server available at `http://localhost:3000/mcp`
@@ -392,5 +442,10 @@ Designed for Vercel deployment. Base URL auto-detection via `baseUrl.ts` handles
    - Deploy to Vercel or use ngrok for local testing
    - In ChatGPT Settings → Connectors → Create, add `https://your-domain.com/mcp`
    - Requires ChatGPT developer mode access
-- use server actions over api routes whenever possible
-- use arrow function syntax whenever possible
+
+## Development Guidelines
+
+- Use server actions over API routes whenever possible
+- Use arrow function syntax whenever possible
+- Run `pnpm typecheck` before committing
+- Run tests with `pnpm test` to ensure no regressions

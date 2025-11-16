@@ -149,3 +149,15 @@ The configuration automatically handles:
 - Production URLs via `VERCEL_PROJECT_PRODUCTION_URL`
 - Preview/branch URLs via `VERCEL_BRANCH_URL`
 - Asset prefixing for correct resource loading in iframes
+
+
+## Transaction Synchronization
+
+This application uses Plaid's `/transactions/sync` endpoint to keep a local database of user transactions up-to-date. This approach is more efficient and scalable than fetching transactions on-demand.
+
+### How it Works
+
+1.  **Initial Sync**: When a user calls the `get_transactions` or `get_spending_insights` tool for the first time, the system triggers a transaction sync for all of their linked Plaid items.
+2.  **Webhook Updates**: The application listens for `SYNC_UPDATES_AVAILABLE` webhooks from Plaid. When a webhook is received, it triggers a transaction sync for the corresponding item.
+3.  **Data Storage**: Transactions are stored in the `plaid_transactions` table, and accounts are stored in the `plaid_accounts` table. The `plaid_items` table stores a `transactions_cursor` for each item to keep track of the last sync.
+4.  **Data Retrieval**: The `get_transactions` and `get_spending_insights` tools query the local database to retrieve transaction data, ensuring a fast and consistent user experience.

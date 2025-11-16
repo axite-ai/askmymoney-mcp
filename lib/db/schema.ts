@@ -4,6 +4,9 @@ import {
   timestamp,
   boolean,
   integer,
+  jsonb,
+  decimal,
+  index,
 } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
@@ -146,25 +149,33 @@ export const subscription = pgTable("subscription", {
 
 // Custom application tables
 
-export const plaidItems = pgTable("plaid_items", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => createId()),
-  userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  itemId: text("item_id").notNull().unique(),
-  accessToken: text("access_token").notNull(), // Encrypted
-  institutionId: text("institution_id"),
-  institutionName: text("institution_name"),
-  status: text("status").default("active"),
-  consentExpiresAt: timestamp("consent_expires_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at")
-    .defaultNow()
-    .$onUpdate(() => new Date())
-    .notNull(),
-});
+export const plaidItems = pgTable(
+  "plaid_items",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    itemId: text("item_id").notNull().unique(),
+    accessToken: text("access_token").notNull(), // Encrypted
+    institutionId: text("institution_id"),
+    institutionName: text("institution_name"),
+    status: text("status").default("active"),
+    consentExpiresAt: timestamp("consent_expires_at"),
+    transactionsCursor: text("transactions_cursor"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => ({
+    itemIdIndex: index("plaid_items_item_id_idx").on(table.itemId),
+    userIdIndex: index("plaid_items_user_id_idx").on(table.userId),
+  })
+);
 
 export const plaidWebhooks = pgTable("plaid_webhooks", {
   id: text("id")
@@ -177,3 +188,91 @@ export const plaidWebhooks = pgTable("plaid_webhooks", {
   newWebhookUrl: text("new_webhook_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const plaidAccounts = pgTable(
+  "plaid_accounts",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => plaidItems.itemId, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull().unique(),
+    name: text("name").notNull(),
+    mask: text("mask"),
+    officialName: text("official_name"),
+    currentBalance: decimal("current_balance", { precision: 28, scale: 10 }),
+    availableBalance: decimal("available_balance", {
+      precision: 28,
+      scale: 10,
+    }),
+    isoCurrencyCode: text("iso_currency_code"),
+    type: text("type"),
+    subtype: text("subtype"),
+    persistentAccountId: text("persistent_account_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => ({
+    accountIdIndex: index("plaid_accounts_account_id_idx").on(table.accountId),
+    userIdIndex: index("plaid_accounts_user_id_idx").on(table.userId),
+  })
+);
+
+export const plaidTransactions = pgTable(
+  "plaid_transactions",
+  {
+    transactionId: text("transaction_id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => plaidAccounts.accountId),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    amount: decimal("amount", { precision: 28, scale: 10 }).notNull(),
+    isoCurrencyCode: text("iso_currency_code"),
+    unofficialCurrencyCode: text("unofficial_currency_code"),
+    categoryPrimary: text("category_primary"),
+    categoryDetailed: text("category_detailed"),
+    categoryConfidence: text("category_confidence"),
+    checkNumber: text("check_number"),
+    date: timestamp("date").notNull(),
+    datetime: timestamp("datetime"),
+    authorizedDate: timestamp("authorized_date"),
+    authorizedDatetime: timestamp("authorized_datetime"),
+    location: jsonb("location"),
+    merchantName: text("merchant_name"),
+    paymentChannel: text("payment_channel"),
+    pending: boolean("pending").default(false).notNull(),
+    pendingTransactionId: text("pending_transaction_id"),
+    transactionCode: text("transaction_code"),
+    name: text("name"),
+    originalDescription: text("original_description"),
+    logoUrl: text("logo_url"),
+    website: text("website"),
+    counterparties: jsonb("counterparties"),
+    paymentMeta: jsonb("payment_meta"),
+    rawData: jsonb("raw_data"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => ({
+    transactionIdIndex: index("plaid_transactions_transaction_id_idx").on(
+      table.transactionId
+    ),
+    accountIdIndex: index("plaid_transactions_account_id_idx").on(
+      table.accountId
+    ),
+    userIdIndex: index("plaid_transactions_user_id_idx").on(table.userId),
+  })
+);
