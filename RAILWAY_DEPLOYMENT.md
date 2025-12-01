@@ -71,12 +71,8 @@ If you're using external databases instead of Railway's built-in ones:
 
 ```bash
 # PostgreSQL (Railway auto-sets DATABASE_URL, but if using external DB):
-POSTGRES_HOST=<host>
-POSTGRES_PORT=5432
-POSTGRES_DB=<database_name>
-POSTGRES_USER=<username>
-POSTGRES_PASSWORD=<password>
-POSTGRES_SSL=true
+DATABASE_URL=postgresql://user:password@host:port/database
+POSTGRES_SSL=true  # Set to 'true' for SSL connections
 
 # Redis (Railway auto-sets REDIS_URL, but if using external Redis):
 REDIS_URL=redis://<host>:<port>

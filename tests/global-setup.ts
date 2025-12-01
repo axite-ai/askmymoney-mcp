@@ -8,15 +8,13 @@ import { sql } from 'drizzle-orm';
  * Creates test database and applies migrations using Drizzle
  */
 export default async () => {
-  const dbName = process.env.POSTGRES_DB || 'askmymoney_test';
+  const dbName = 'askmymoney_test';
+  const baseUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432';
+  const adminUrl = baseUrl.replace(/\/[^/]*$/, '/postgres'); // Replace database name with 'postgres'
 
   // Connect to postgres database to create/check test database
   const adminPool = new Pool({
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    user: process.env.POSTGRES_USER || 'postgres',
-    password: process.env.POSTGRES_PASSWORD || 'postgres',
-    database: 'postgres', // Connect to default database
+    connectionString: adminUrl,
   });
 
   const adminDb = drizzle(adminPool);
@@ -42,12 +40,9 @@ export default async () => {
   }
 
   // Apply migrations to the test database programmatically
+  const testUrl = baseUrl.replace(/\/[^/]*$/, `/${dbName}`); // Replace database name with test db
   const testPool = new Pool({
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    user: process.env.POSTGRES_USER || 'postgres',
-    password: process.env.POSTGRES_PASSWORD || 'postgres',
-    database: dbName,
+    connectionString: testUrl,
   });
   const testDb = drizzle(testPool);
 
@@ -68,11 +63,7 @@ export default async () => {
    */
   return async () => {
     const adminPool = new Pool({
-      host: process.env.POSTGRES_HOST || 'localhost',
-      port: parseInt(process.env.POSTGRES_PORT || '5432'),
-      user: process.env.POSTGRES_USER || 'postgres',
-      password: process.env.POSTGRES_PASSWORD || 'postgres',
-      database: 'postgres',
+      connectionString: adminUrl,
     });
 
     const adminDb = drizzle(adminPool);

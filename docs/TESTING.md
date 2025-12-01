@@ -138,7 +138,7 @@ NODE_ENV=test pnpm db:studio
 When running tests in CI:
 
 1. Ensure PostgreSQL is available
-2. Set `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD` if different from defaults
+2. Set `DATABASE_URL` if different from the default (`postgresql://postgres:postgres@localhost:5432/askmymoney_test`)
 3. Override any environment variables that differ from `.env.test` defaults
 
 ## Known Issues & TODOs

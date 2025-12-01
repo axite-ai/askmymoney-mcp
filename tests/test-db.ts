@@ -13,11 +13,7 @@ import * as schema from '@/lib/db/schema';
  */
 export const createTestPool = () => {
   return new Pool({
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    database: process.env.POSTGRES_DB || 'askmymoney_test',
-    user: process.env.POSTGRES_USER || 'postgres',
-    password: process.env.POSTGRES_PASSWORD || 'postgres',
+    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/askmymoney_test',
     ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
   });
 };
