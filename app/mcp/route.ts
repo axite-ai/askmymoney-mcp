@@ -133,6 +133,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
       { id: 'recurring-payments', title: 'Recurring Payments Widget', description: 'Track subscriptions and recurring charges with upcoming payment predictions', path: '/widgets/recurring-payments' },
       { id: 'business-cashflow', title: 'Business Cash Flow Widget', description: 'Runway calculator and burn rate analysis for businesses', path: '/widgets/business-cashflow' },
       { id: 'expense-categorizer', title: 'Expense Categorizer Widget', description: 'Smart expense categorization with tax category mapping', path: '/widgets/expense-categorizer' },
+      { id: '2fa-required', title: 'Set Up Two-Factor Authentication', description: 'Complete 2FA setup to access sensitive features', path: '/widgets/2fa-required' },
       { id: 'plaid-required', title: 'Connect Bank Account', description: 'Prompts user to connect their bank account via Plaid', path: '/widgets/plaid-required' },
       { id: 'subscription-required', title: 'Choose Subscription Plan', description: 'Select and subscribe to a plan to unlock features', path: '/widgets/subscription-required' },
       { id: 'manage-subscription', title: 'Manage Subscription', description: 'Update or cancel your subscription', path: '/widgets/manage-subscription' },
@@ -1166,6 +1167,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
           const authCheck = await requireAuth(session, "subscription management", {
             requireSubscription: true,
             requirePlaid: false,
+            headers: req.headers,
           });
           if (authCheck) return authCheck;
 
@@ -1256,6 +1258,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
           const authCheck = await requireAuth(session, "account management", {
             requireSubscription: true,
             requirePlaid: false,
+            headers: req.headers,
           });
           if (authCheck) return authCheck;
 

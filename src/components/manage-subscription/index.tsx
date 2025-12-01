@@ -18,7 +18,7 @@ import { useWidgetProps } from "@/src/use-widget-props";
 import { useDisplayMode } from "@/src/use-display-mode";
 import { useMaxHeight } from "@/src/use-max-height";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
-import WidgetLoadingSkeleton from "@/src/components/shared/widget-loading-skeleton";
+import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
 
 interface ManageSubscriptionProps extends Record<string, unknown> {
   billingPortalUrl?: string;

@@ -5,7 +5,7 @@ interface WidgetLoadingSkeletonProps {
   className?: string;
 }
 
-export default function WidgetLoadingSkeleton({ className }: WidgetLoadingSkeletonProps = {}) {
+export function WidgetLoadingSkeleton({ className }: WidgetLoadingSkeletonProps = {}) {
   return (
     <div
       className={cn(

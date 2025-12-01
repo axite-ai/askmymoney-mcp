@@ -14,7 +14,7 @@ import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
 import { cn } from "@/lib/utils/cn";
 import { EmptyMessage } from "@openai/apps-sdk-ui/components/EmptyMessage";
 import { AnimateLayout } from "@openai/apps-sdk-ui/components/Transition";
-import WidgetLoadingSkeleton from "@/src/components/shared/widget-loading-skeleton";
+import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
 
 interface Category {
   name: string;
@@ -354,7 +354,6 @@ export default function SpendingInsights() {
 
           {/* Categories List */}
           <div className="space-y-3">
-            <AnimatePresence mode="popLayout">
               {categoriesWithMetadata.map((category, index) => (
                 <CategoryBar
                   key={category.name}
@@ -366,7 +365,6 @@ export default function SpendingInsights() {
                   isSelected={uiState.selectedIndex === index}
                 />
               ))}
-            </AnimatePresence>
           </div>
         </div>
       </div>

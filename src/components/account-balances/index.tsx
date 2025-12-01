@@ -19,6 +19,7 @@ import { useDisplayMode } from "@/src/use-display-mode";
 import { useMaxHeight } from "@/src/use-max-height";
 import { formatCurrency } from "@/src/utils/format";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
+import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
 import { cn } from "@/lib/utils/cn";
 import type { AccountOverviewContent } from "@/lib/types/tool-responses";
 
@@ -191,10 +192,16 @@ export default function AccountBalances() {
     });
   };
 
+  // Show loading skeleton during initial load
+  if (!toolOutput) {
+    return <WidgetLoadingSkeleton />;
+  }
+
   // Check for auth requirements
   const authComponent = checkWidgetAuth(toolOutput);
   if (authComponent) return authComponent;
 
+  // Show empty state only if there's truly no data
   if (!toolOutput?.structuredContent) {
     return (
       <EmptyMessage>

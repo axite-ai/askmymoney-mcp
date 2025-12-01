@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { AnimatePresence } from "framer-motion";
 import {
   Expand,
   Error,
@@ -18,6 +17,7 @@ import { useWidgetProps } from "@/src/use-widget-props";
 import { useDisplayMode } from "@/src/use-display-mode";
 import { useMaxHeight } from "@/src/use-max-height";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
+import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
 
 interface HealthAccount {
   account_id: string;
@@ -206,19 +206,16 @@ export default function AccountHealth() {
   const maxHeight = useMaxHeight();
   const isFullscreen = displayMode === "fullscreen";
 
+  // Show loading skeleton during initial load
+  if (!toolOutput) {
+    return <WidgetLoadingSkeleton />;
+  }
+
   // Auth checks
-  // Check for auth requirements
   const authComponent = checkWidgetAuth(toolOutput);
   if (authComponent) return authComponent;
 
-  if (!toolOutput) {
-    return (
-      <EmptyMessage>
-        <EmptyMessage.Title>No health data available</EmptyMessage.Title>
-      </EmptyMessage>
-    );
-  }
-
+  // Show empty state only if there's truly no data
   if (!toolOutput.accounts || toolOutput.accounts.length === 0) {
     return (
       <EmptyMessage>
@@ -310,7 +307,6 @@ export default function AccountHealth() {
                   : "grid-cols-1"
               )}
             >
-              <AnimatePresence mode="popLayout">
                 {accountsWithWarnings.map((account, index) => (
                   <WarningCard
                     key={account.account_id}
@@ -318,7 +314,6 @@ export default function AccountHealth() {
                     index={index}
                   />
                 ))}
-              </AnimatePresence>
             </div>
           </div>
         ) : (

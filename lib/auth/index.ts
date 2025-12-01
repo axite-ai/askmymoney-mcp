@@ -6,7 +6,9 @@
  */
 
 import { betterAuth } from "better-auth";
-import { mcp, apiKey, jwt } from "better-auth/plugins";
+import { createAuthMiddleware } from "better-auth/api";
+import { mcp, apiKey, jwt, twoFactor } from "better-auth/plugins";
+import { passkey } from "@better-auth/passkey";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { stripe } from "@better-auth/stripe";
 import { db, pool, schema } from "@/lib/db";
@@ -51,18 +53,36 @@ const ensureLeadingSlash = (value: string) =>
   value.startsWith("/") ? value : `/${value}`;
 
 // Determine the application origin (used for user-facing URLs)
-const appOrigin = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
-  : "https://dev.askmymoney.ai";
+// Use fixed domain to ensure consistent OAuth redirect URIs
+// VERCEL_URL changes per preview deployment and breaks Google OAuth
+const appOrigin = "https://dev.askmymoney.ai";
 
 const authBasePath = ensureLeadingSlash(
   process.env.BETTER_AUTH_BASE_PATH || "/api/auth"
 );
 
 // Get base URL for Better Auth endpoints (should include `/api/auth`)
-const baseURL =
+let baseURL =
   process.env.BETTER_AUTH_URL ||
   `${stripTrailingSlash(appOrigin)}${authBasePath}`;
+
+// Ensure baseURL includes the authBasePath (e.g. /api/auth)
+// This fixes 404s when BETTER_AUTH_URL is set to the root domain (e.g. https://dev.askmymoney.ai)
+// but Better Auth expects the full path to the auth endpoints for routing.
+if (!baseURL.endsWith(authBasePath)) {
+  baseURL = `${stripTrailingSlash(baseURL)}${authBasePath}`;
+}
+
+console.log("[Auth Config] Resolved URLs:", {
+  appOrigin,
+  authBasePath,
+  baseURL, // This should now correctly include /api/auth
+  originalBetterAuthUrl: process.env.BETTER_AUTH_URL,
+  vercelUrl: process.env.VERCEL_URL,
+  nodeEnv: process.env.NODE_ENV,
+  hasGoogleId: !!process.env.GOOGLE_CLIENT_ID,
+  hasGoogleSecret: !!process.env.GOOGLE_CLIENT_SECRET
+});
 
 // Resource URL advertised to OAuth clients (should remain the origin)
 const resourceURL = process.env.MCP_RESOURCE_URL || appOrigin;
@@ -135,12 +155,18 @@ export const auth = betterAuth({
     },
   },
 
-  // Email and password authentication
-  emailAndPassword: {
-    enabled: true,
-    minPasswordLength: 8,
-    maxPasswordLength: 128,
+  // Application name (used as issuer for TOTP)
+  appName: "AskMyMoney",
+
+  // Social OAuth providers
+  socialProviders: {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+      enabled: true,
+    },
   },
+
   telemetry: {
     debug: true
   },
@@ -151,6 +177,19 @@ export const auth = betterAuth({
 
   // Plugins
   plugins: [
+    passkey(),
+    twoFactor({
+      issuer: "AskMyMoney",
+      totpOptions: {
+        period: 30,
+        digits: 6,
+      },
+      backupCodeOptions: {
+        amount: 10,
+        length: 10,
+      },
+      skipVerificationOnEnable: false,
+    }),
     apiKey({
       // Enable API key authentication for server-side operations
       // This allows MCP tools to call auth.api methods without user sessions
@@ -209,7 +248,7 @@ export const auth = betterAuth({
             type: "public",
             metadata: {},
             disabled: false,
-            redirectURLs: [
+            redirectUrls: [
               "https://claude.ai/api/mcp/auth_callback",
               "https://claude.com/api/mcp/auth_callback",
             ],
@@ -221,7 +260,7 @@ export const auth = betterAuth({
             type: "public",
             metadata: {},
             disabled: false,
-            redirectURLs: [
+            redirectUrls: [
               "https://chatgpt.com/connector_platform_oauth_redirect",
               "https://chat.openai.com/connector_platform_oauth_redirect",
             ],
@@ -367,7 +406,7 @@ export const auth = betterAuth({
                 .select()
                 .from(schema.subscription)
                 .where(eq(schema.subscription.stripeSubscriptionId, subscription.stripeSubscriptionId));
-              
+
               console.log("[Stripe] Database lookup by stripeSubscriptionId:", {
                 stripeSubscriptionId: subscription.stripeSubscriptionId,
                 found: stripeIdCheckResult.length,

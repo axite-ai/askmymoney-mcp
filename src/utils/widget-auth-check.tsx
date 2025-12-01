@@ -7,6 +7,7 @@
 
 import PlaidRequired from "@/src/components/plaid-required";
 import SubscriptionRequired from "@/src/components/subscription-required";
+import SecurityRequired from "@/src/components/security-required";
 
 /**
  * Check widget auth state and return appropriate component if auth is required.
@@ -30,15 +31,20 @@ import SubscriptionRequired from "@/src/components/subscription-required";
 export function checkWidgetAuth(toolOutput: any) {
   if (!toolOutput) return null;
 
-  // Check for Plaid connection required
-  if (toolOutput.message === "Bank connection required") {
-    return <PlaidRequired />;
+  // Check for Security required (2FA or Passkey)
+  if (toolOutput.message === "Security setup required") {
+    return <SecurityRequired />;
   }
 
   // Check for subscription required
   // Only show subscription modal if there's an actual error, not just because featureName exists
   if (toolOutput.error_message === "Subscription required") {
     return <SubscriptionRequired />;
+  }
+
+  // Check for Plaid connection required
+  if (toolOutput.message === "Bank connection required") {
+    return <PlaidRequired />;
   }
 
   // No auth issues

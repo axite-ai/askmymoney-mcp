@@ -20,7 +20,7 @@ import { useWidgetProps } from "@/src/use-widget-props";
 import { useOpenAiGlobal } from "@/src/use-openai-global";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
 import SubscriptionRequired from "@/src/components/subscription-required";
-import WidgetLoadingSkeleton from "@/src/components/shared/widget-loading-skeleton";
+import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
 import {
   type ConnectedItem,
   type ConnectItemStatus,

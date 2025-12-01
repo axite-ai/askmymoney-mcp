@@ -69,6 +69,7 @@ export default function ConnectBankClient() {
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const limitCheckInterval = useRef<NodeJS.Timeout | null>(null);
+  const connectedItemsRef = useRef(connectedItems.length);
 
   const mcpToken = searchParams.get('token');
 
@@ -89,6 +90,11 @@ export default function ConnectBankClient() {
   useEffect(() => {
     loadConnectedItems();
   }, [mcpToken]);
+
+  // Keep ref in sync with connectedItems
+  useEffect(() => {
+    connectedItemsRef.current = connectedItems.length;
+  }, [connectedItems]);
 
   // Initialize link token (only when user clicks connect, not on page load)
   const initializeLinkToken = async () => {
@@ -179,19 +185,28 @@ export default function ConnectBankClient() {
       try {
         const result = await checkPlanLimit(mcpToken || undefined);
 
-        if (result.success && result.limitReached) {
-          console.log('[Connect Bank] Plan limit reached, closing Link');
-          setLimitReached(true);
-
-          if (exit) {
-            exit({ force: true });
+        if (result.success) {
+          // Check for new items (Multi-Item Link updates)
+          // We use a ref for current count to avoid stale closures in the interval
+          if (result.itemCount > connectedItemsRef.current) {
+            console.log('[Connect Bank] Detected new item, refreshing list...');
+            await loadConnectedItems();
           }
 
-          if (limitCheckInterval.current) {
-            clearInterval(limitCheckInterval.current);
-            limitCheckInterval.current = null;
+          if (result.limitReached) {
+            console.log('[Connect Bank] Plan limit reached, closing Link');
+            setLimitReached(true);
+
+            if (exit) {
+              exit({ force: true });
+            }
+
+            if (limitCheckInterval.current) {
+              clearInterval(limitCheckInterval.current);
+              limitCheckInterval.current = null;
+            }
           }
-        } else if (!result.success) {
+        } else {
           console.error('[Connect Bank] Plan limit check failed:', result.error);
         }
       } catch (error) {
@@ -305,7 +320,7 @@ export default function ConnectBankClient() {
   // Only show full-page error for critical issues (not limit reached)
   if (pageData.error && !pageData.error.includes('Account limit')) {
     return (
-      <div className={cn("min-h-screen flex items-center justify-center p-4", isDark ? "bg-gradient-to-br from-gray-900 to-gray-800" : "bg-gradient-to-br from-gray-50 to-gray-100")}>
+      <div className={cn("min-h-screen flex items-center justify-center p-4", isDark ? "bg-linear-to-br from-gray-900 to-gray-800" : "bg-linear-to-br from-gray-50 to-gray-100")}>
         <div className={cn("max-w-md w-full rounded-xl shadow-2xl p-8 border", isDark ? "bg-gray-800 border-red-500/30" : "bg-white border-red-300")}>
           <div className="text-center">
             <div className="mb-6">
@@ -325,7 +340,7 @@ export default function ConnectBankClient() {
   }
 
   return (
-    <div className={cn("min-h-screen p-6", isDark ? "bg-gradient-to-br from-gray-900 to-gray-800" : "bg-gradient-to-br from-gray-50 to-gray-100")}>
+    <div className={cn("min-h-screen p-6", isDark ? "bg-linear-to-br from-gray-900 to-gray-800" : "bg-linear-to-br from-gray-50 to-gray-100")}>
       <div className="max-w-7xl mx-auto">
         <h1 className={cn("text-3xl font-bold mb-8", isDark ? "text-white" : "text-black")}>
           Manage Financial Accounts

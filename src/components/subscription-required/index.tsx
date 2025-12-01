@@ -1,16 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { motion } from "framer-motion";
 import {
   Lock,
   Check,
-  Expand,
   Sparkle,
 } from "@openai/apps-sdk-ui/components/Icon";
 import { Button } from "@openai/apps-sdk-ui/components/Button";
 import { Badge } from "@openai/apps-sdk-ui/components/Badge";
 import { Alert } from "@openai/apps-sdk-ui/components/Alert";
+import { RadioGroup } from "@openai/apps-sdk-ui/components/RadioGroup";
 import { AnimateLayout } from "@openai/apps-sdk-ui/components/Transition";
 import { useWidgetProps } from "@/src/use-widget-props";
 import { useOpenAiGlobal } from "@/src/use-openai-global";
@@ -79,18 +78,16 @@ export default function SubscriptionRequired() {
   const maxHeight = useMaxHeight();
   const isFullscreen = displayMode === "fullscreen";
 
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<string>("pro");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    console.log("[SubscriptionRequired] Plan selection changed:", selectedPlan);
+  }, [selectedPlan]);
+
   const featureName = toolOutput?.featureName || "this feature";
   const userId = toolMetadata?.userId;
-
-
-  const handleSelectPlan = (planId: string) => {
-    if (isLoading) return;
-    setSelectedPlan(planId);
-  };
 
   const handleSubscribe = async () => {
     if (!selectedPlan || isLoading) return;
@@ -132,146 +129,150 @@ export default function SubscriptionRequired() {
     }
   };
 
+  const selectedPlanDetails = PLANS.find((p) => p.id === selectedPlan);
+
   return (
     <div
-      className={`antialiased w-full relative bg-surface text-default ${!isFullscreen ? "overflow-hidden" : ""}`}
+      className={cn(
+        "antialiased w-full bg-surface text-default flex flex-col",
+        !isFullscreen && "overflow-hidden"
+      )}
       style={{
         maxHeight: maxHeight ?? undefined,
-        height: isFullscreen ? maxHeight ?? undefined : "auto",
+        height: isFullscreen ? "100%" : "auto",
+        minHeight: isFullscreen ? "100vh" : undefined,
       }}
     >
-      {/* Expand button (inline mode only) */}
-      {!isFullscreen && (
-        <Button
-          onClick={() => window.openai?.requestDisplayMode({ mode: "fullscreen" })}
-          variant="ghost"
-          size="sm"
-          color="secondary"
-          className="absolute top-4 right-4 z-20"
-          aria-label="Expand to fullscreen"
-        >
-          <Expand className="h-4 w-4" />
-        </Button>
-      )}
+      <div className={cn("w-full max-w-3xl mx-auto flex-1 flex flex-col", isFullscreen ? "p-6 md:p-8" : "p-0")}>
 
-      {/* Content */}
-      <div className={`w-full h-full overflow-y-auto ${isFullscreen ? "p-8" : "p-0"}`}>
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 rounded-lg bg-info-surface text-info">
-              <Lock className="h-5 w-5" />
-            </div>
-            <h1 className="heading-lg">
-              Choose Your Plan
-            </h1>
+        {/* Header Section */}
+        <div className="mb-6 text-center sm:text-left">
+          <div className="inline-flex items-center gap-2 mb-3 px-3 py-1 rounded-full bg-info-surface text-info border border-info-surface">
+            <Lock className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium uppercase tracking-wide">Subscription Required</span>
           </div>
-          <p className="text-sm text-secondary">
-            Upgrade to access {String(featureName)}
+          <h1 className="heading-xl mb-3">
+            Unlock {featureName}
+          </h1>
+          <p className="text-secondary text-md max-w-lg mx-auto sm:mx-0">
+            Choose the plan that fits your financial journey. Upgrade anytime to access advanced features and higher limits.
           </p>
         </div>
 
-        {/* Error Message */}
+        {/* Error Alert */}
         {error && (
-          <div className="mb-4">
+          <div className="mb-6">
             <Alert
+              variant="soft"
               color="danger"
               description={error}
             />
           </div>
         )}
 
-        {/* Plan Cards */}
-        <div className="space-y-3">
-          {PLANS.map((plan, index) => {
+        {/* Plan Selection - Radio Group */}
+        <RadioGroup
+          value={selectedPlan}
+          onChange={setSelectedPlan}
+          className="flex flex-col gap-4 mb-8"
+          aria-label="Select a subscription plan"
+        >
+          {PLANS.map((plan) => {
             const isSelected = selectedPlan === plan.id;
-
             return (
-              <AnimateLayout key={plan.id}>
-                <div
-                  key={plan.id}
-                  className={cn(
-                    "relative cursor-pointer rounded-2xl border-none p-4 transition-all",
-                    isSelected
-                      ? "bg-info-soft ring-2 ring-info"
-                      : "bg-surface hover:bg-surface-secondary",
-                    plan.popular && !isSelected && "border-none ring-1 ring-info"
-                  )}
-                  onClick={() => handleSelectPlan(plan.id)}
-                >
-                  {/* Popular Badge */}
-                  {plan.popular && (
-                      <div className="absolute -top-2 right-4">
-                        <Badge color="discovery" size="sm" pill className="shadow-sm">
-                          <Sparkle className="h-3 w-3 mr-1" />
-                          Popular
-                        </Badge>
-                      </div>
-                    )}
+              <RadioGroup.Item
+                key={plan.id}
+                value={plan.id}
+                className={cn(
+                  "group relative flex flex-col sm:flex-row items-start sm:items-center gap-4 p-5 rounded-xl border transition-all cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                  isSelected
+                    ? "border-primary bg-surface-secondary shadow-sm"
+                    : "border-default bg-surface hover:border-subtle hover:bg-surface-secondary"
+                )}
+              >
+                {/* Custom Radio Indicator */}
+                <div className="mt-1 sm:mt-0 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-default group-data-[state=checked]:border-primary group-data-[state=checked]:bg-primary transition-colors">
+                  <div className="h-2 w-2 rounded-full bg-surface opacity-0 group-data-[state=checked]:opacity-100 transition-opacity" />
+                </div>
 
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="heading-sm text-default">
+                {/* Card Content */}
+                <div className="flex-1 w-full">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3 sm:mb-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-lg">
                         {plan.name}
                       </h3>
-                      {plan.trial && (
-                        <p className="text-xs font-medium text-info">
-                          {plan.trial}
-                        </p>
+                      {plan.popular && (
+                        <Badge color="discovery" size="sm" pill className="gap-1 shadow-sm">
+                          <Sparkle className="h-3 w-3" />
+                          Popular
+                        </Badge>
                       )}
                     </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-default">
-                        {plan.price}
-                      </div>
-                      <div className="text-xs text-secondary">
-                        /{plan.interval}
-                      </div>
+                    <div className="text-left sm:text-right flex items-baseline gap-1">
+                      <span className="text-xl font-bold">{plan.price}</span>
+                      <span className="text-secondary text-sm">/{plan.interval}</span>
                     </div>
                   </div>
 
-                  {/* Features List */}
-                  <ul className="space-y-2">
-                    {plan.features.map((feature, idx) => (
-                      <li key={idx} className="flex items-center gap-2 text-sm">
-                        <div className="p-0.5 rounded-full bg-success-surface flex-shrink-0">
-                          <Check
-                            className="h-3 w-3 text-success"
-                          />
-                        </div>
-                        <span className="text-secondary">
-                          {feature}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  {plan.trial && (
+                    <div className="mb-3">
+                      <span className="text-xs font-medium text-info bg-info-surface px-2 py-0.5 rounded-full border border-info-surface">
+                        {plan.trial}
+                      </span>
+                    </div>
+                  )}
+
+                  <AnimateLayout>
+                    {isSelected && (
+                      <div key="features" className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mt-3 pt-3 border-t border-subtle/50">
+                        {plan.features.map((feature, i) => (
+                          <div key={i} className="flex items-start gap-2 text-sm text-secondary">
+                            <Check className="h-4 w-4 text-success flex-shrink-0 mt-0.5" />
+                            <span className="leading-tight">{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </AnimateLayout>
+
+                  {/* Summary for unselected items (mobile/compact view mainly) */}
+                  {!isSelected && (
+                     <p className="text-sm text-tertiary mt-1 line-clamp-1">
+                        {plan.features.slice(0, 3).join(" • ")}...
+                     </p>
+                  )}
                 </div>
-              </AnimateLayout>
+              </RadioGroup.Item>
             );
           })}
+        </RadioGroup>
+
+        {/* Sticky Footer Action */}
+        <div className="mt-auto pt-6 border-t border-subtle">
+          <Button
+            size="xl"
+            variant="solid"
+            color="primary"
+            block
+            onClick={handleSubscribe}
+            loading={isLoading}
+            disabled={!selectedPlan || isLoading}
+            className="mb-4 font-semibold shadow-sm"
+          >
+            {isLoading
+              ? "Processing..."
+              : selectedPlanDetails?.trial
+                ? `Start ${selectedPlanDetails.trial}`
+                : `Subscribe to ${selectedPlanDetails?.name || "Plan"}`
+            }
+          </Button>
+
+          <p className="text-center text-xs text-tertiary">
+            Secure payment via Stripe. You can cancel anytime from your account settings.
+          </p>
         </div>
 
-        {/* Subscribe Button */}
-        <AnimateLayout>
-          <div key="subscribe-button" className="mt-6">
-            <Button
-              id="subscribe-btn"
-              disabled={!selectedPlan || isLoading}
-              loading={isLoading}
-              onClick={handleSubscribe}
-              color="primary"
-              size="xl"
-              block
-            >
-              {isLoading ? "Opening Stripe..." : selectedPlan ? `Subscribe to ${PLANS.find((p) => p.id === selectedPlan)?.name}` : "Select a plan to continue"}
-            </Button>
-          </div>
-        </AnimateLayout>
-
-        {/* Footer */}
-        <p className="text-xs text-center mt-4 text-tertiary">
-          Secure checkout powered by Stripe
-        </p>
       </div>
     </div>
   );
