@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { AnimatePresence } from "framer-motion";
 import {
   Expand,
   Search,
@@ -24,6 +23,7 @@ import { useDisplayMode } from "@/src/use-display-mode";
 import { useMaxHeight } from "@/src/use-max-height";
 import { formatCurrency, formatDate } from "@/src/utils/format";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
+import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
 import type { Transaction } from "plaid";
 
 interface TransactionWithEnrichment extends Transaction {
@@ -168,10 +168,16 @@ export default function Transactions() {
     return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
   }, [filteredTransactions]);
 
+  // Show loading skeleton during initial load
+  if (!toolOutput) {
+    return <WidgetLoadingSkeleton />;
+  }
+
   const authComponent = checkWidgetAuth(toolOutput);
   if (authComponent) return authComponent;
 
-  if (!toolOutput && !toolMetadata) {
+  // Show empty state only if there's truly no data
+  if (!toolMetadata?.transactions || toolMetadata.transactions.length === 0) {
     return (
       <EmptyMessage>
         <EmptyMessage.Title>No transactions available</EmptyMessage.Title>
@@ -339,8 +345,7 @@ export default function Transactions() {
                   </h3>
                 </div>
 
-                <div className="space-y-2">
-                  <AnimatePresence mode="popLayout">
+                <AnimateLayout transitionClassName="space-y-2">
                     {(isFullscreen || expandedDateGroupsSet.has(date) ? txs : txs.slice(0, MAX_VISIBLE_INLINE)).map((tx) => {
                       const isExpanded = uiState.expandedTx === tx.transaction_id;
                       const merchantName = tx.merchant_name || tx.name || "Unknown";
@@ -351,7 +356,6 @@ export default function Transactions() {
                       const logo = tx.logo_url || tx.counterparties?.[0]?.logo_url;
 
                       return (
-                        <AnimateLayout key={tx.transaction_id}>
                           <div
                             key={tx.transaction_id}
                             className="rounded-2xl border border-subtle bg-surface shadow-hairline cursor-pointer hover:bg-surface-secondary transition-colors"
@@ -413,7 +417,6 @@ export default function Transactions() {
                               </div>
                               </div>
                             </div>
-                          </div>
 
                           {isExpanded && (
                             <div className="px-4 pb-4 border-t border-subtle">
@@ -465,10 +468,10 @@ export default function Transactions() {
                               </div>
                             </div>
                           )}
-                        </AnimateLayout>
+                        </div>
                       );
                     })}
-                  </AnimatePresence>
+                </AnimateLayout>
 
                   {!isFullscreen && !expandedDateGroupsSet.has(date) && txs.length > MAX_VISIBLE_INLINE && (
                     <Button
@@ -483,7 +486,6 @@ export default function Transactions() {
                     </Button>
                   )}
                 </div>
-              </div>
             ))}
 
             {!isFullscreen && !uiState.showAllDates && groupedTransactions.length > MAX_DATE_GROUPS_INLINE && (

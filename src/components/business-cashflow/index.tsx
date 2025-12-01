@@ -4,6 +4,7 @@ import { useWidgetProps } from "@/src/use-widget-props";
 import { useOpenAiGlobal } from "@/src/use-openai-global";
 import type { BusinessCashFlowContent } from "@/lib/types/tool-responses";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
+import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
 import { useState } from "react";
 import { EmptyMessage } from "@openai/apps-sdk-ui/components/EmptyMessage";
 import { Button } from "@openai/apps-sdk-ui/components/Button";
@@ -38,9 +39,15 @@ export default function BusinessCashFlowWidget() {
   const maxHeight = useMaxHeight();
   const isFullscreen = displayMode === "fullscreen";
 
+  // Show loading skeleton during initial load
+  if (!toolOutput) {
+    return <WidgetLoadingSkeleton />;
+  }
+
   const authComponent = checkWidgetAuth(toolOutput);
   if (authComponent) return authComponent;
 
+  // Show empty state only if there's truly no data
   if (!toolOutput?.structuredContent) {
     return (
       <EmptyMessage>

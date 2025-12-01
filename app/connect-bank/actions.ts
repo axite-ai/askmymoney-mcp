@@ -2,7 +2,7 @@
 
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { user, subscription } from '@/lib/db/schema';
+import { user, subscription, passkey } from '@/lib/db/schema';
 import { eq, and, inArray, desc } from 'drizzle-orm';
 import { headers, cookies } from 'next/headers';
 import { hasActiveSubscription } from '@/lib/utils/subscription-helpers';
@@ -70,7 +70,25 @@ export const createPlaidLinkToken = async (
 
     const userId = mcpSession.userId;
 
-    // Check 2: Active Subscription
+    // Check 2: Security (2FA or Passkey) Enabled (CRITICAL SECURITY CHECK)
+    const fullSession = await auth.api.getSession({ headers: authHeaders });
+    const twoFactorEnabled = fullSession?.user?.twoFactorEnabled;
+
+    let hasPasskey = false;
+    if (!twoFactorEnabled) {
+      const passkeys = await db.select().from(passkey).where(eq(passkey.userId, userId)).limit(1);
+      hasPasskey = passkeys.length > 0;
+    }
+
+    if (!twoFactorEnabled && !hasPasskey) {
+      console.log('[Server Action] Security not enabled for user:', userId);
+      return {
+        success: false,
+        error: 'Security setup required. Please enable 2FA or Passkeys in your account settings.',
+      };
+    }
+
+    // Check 3: Active Subscription
     const hasSubscription = await hasActiveSubscription(userId);
     if (!hasSubscription) {
       return {

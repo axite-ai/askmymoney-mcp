@@ -140,3 +140,59 @@ export async function createPlaidRequiredResponse(userId: string, headers: Heade
 
   return response;
 }
+
+/**
+ * Create a response prompting the user to set up security (2FA or Passkey)
+ *
+ * This is a security requirement - all users must enable a second factor.
+ *
+ * @param featureName - Optional name of the feature requiring security
+ * @param userId - User ID from the authenticated session
+ * @param headers - Request headers containing the MCP Bearer token
+ * @returns MCP tool response indicating security setup is required
+ */
+export function createSecurityRequiredResponse(featureName?: string, userId?: string, headers?: Headers) {
+  console.log('[Security Required Response] Creating response for user:', userId);
+
+  // Extract the Bearer token from the Authorization header
+  const authHeader = headers?.get('authorization');
+  const mcpToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
+
+  console.log('[Security Required Response] MCP token:', mcpToken ? 'present' : 'missing');
+
+  const baseMessage = featureName
+    ? `To access ${featureName}, you must first enable two-factor authentication or a passkey.`
+    : "This feature requires additional security. Please complete security setup to continue.";
+
+  const responseMeta: OpenAIResponseMetadata = {
+    "openai/toolInvocation/invoking": "Checking security status",
+    "openai/toolInvocation/invoked": "Security setup required",
+    "openai/outputTemplate": "ui://widget/security-required.html", // We will map this to a simple widget later or just rely on the link
+    "openai/widgetAccessible": false,
+    "openai/resultCanProduceWidget": true,
+  };
+
+  const response = {
+    content: [
+      {
+        type: "text" as const,
+        text: baseMessage,
+      } as { [x: string]: unknown; type: "text"; text: string },
+    ],
+    // Pass the MCP access token to the widget so it can open /onboarding with auth
+    structuredContent: {
+      message: "Security setup required",
+      baseUrl: baseURL,
+      featureName: featureName || "this feature",
+      setupUrl: `${baseURL}/onboarding`,
+    },
+    isError: false, // Not an error - security requirement
+    _meta: {
+      ...responseMeta,
+      userId,
+      mcpToken, // MCP Bearer token for authenticating popup
+    },
+  };
+
+  return response;
+}

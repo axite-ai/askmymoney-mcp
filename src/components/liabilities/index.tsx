@@ -21,7 +21,7 @@ import { useDisplayMode } from "@/src/use-display-mode";
 import { useMaxHeight } from "@/src/use-max-height";
 import { formatCurrency, formatDate, formatPercent } from "@/src/utils/format";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
-import WidgetLoadingSkeleton from "@/src/components/shared/widget-loading-skeleton";
+import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
 
 // Type definitions for comprehensive liability data
 interface Account {
