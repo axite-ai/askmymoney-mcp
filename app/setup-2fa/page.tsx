@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@openai/apps-sdk-ui/components/Button";
 import { Input } from "@openai/apps-sdk-ui/components/Input";
@@ -9,7 +9,7 @@ import { ShieldCheck } from "@openai/apps-sdk-ui/components/Icon";
 import { authClient } from "@/lib/auth/client";
 import QRCode from "react-qr-code";
 
-export default function Setup2FAPage() {
+function Setup2FAContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [totpUri, setTotpUri] = useState("");
@@ -194,5 +194,17 @@ export default function Setup2FAPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Setup2FAPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    }>
+      <Setup2FAContent />
+    </Suspense>
   );
 }
