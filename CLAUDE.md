@@ -474,10 +474,14 @@ TypeScript path alias: `@/*` maps to project root (e.g., `@/lib/auth` → `/lib/
 
 ## Deployment
 
-Designed for Vercel deployment. Base URL auto-detection via `baseUrl.ts` handles:
-- Production URLs via `VERCEL_PROJECT_PRODUCTION_URL`
-- Preview/branch URLs via `VERCEL_BRANCH_URL`
-- Local development fallback to `http://localhost:3000`
+Supports multiple deployment platforms. Base URL auto-detection via `baseUrl.ts` handles:
+- **Railway**: `RAILWAY_PUBLIC_DOMAIN` or `RAILWAY_STATIC_URL`
+- **Vercel**: `VERCEL_URL` (auto-set by Vercel)
+- **Local development**: Falls back to `https://dev.askmymoney.ai`
+
+Priority order: Railway → Vercel → Local development
+
+See `RAILWAY_DEPLOYMENT.md` for Railway-specific deployment instructions.
 
 ## Testing
 

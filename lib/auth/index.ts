@@ -16,6 +16,7 @@ import { eq } from "drizzle-orm";
 import { Redis } from "ioredis";
 import Stripe from "stripe";
 import type { Subscription, StripePlan } from "@better-auth/stripe";
+import { baseURL as importedBaseURL } from "@/baseUrl";
 
 // Create Redis client for secondary storage (rate limiting, caching)
 if (!process.env.REDIS_URL) {
@@ -53,9 +54,9 @@ const ensureLeadingSlash = (value: string) =>
   value.startsWith("/") ? value : `/${value}`;
 
 // Determine the application origin (used for user-facing URLs)
-// Use fixed domain to ensure consistent OAuth redirect URIs
-// VERCEL_URL changes per preview deployment and breaks Google OAuth
-const appOrigin = "https://dev.askmymoney.ai";
+// Dynamically detect deployment platform: Railway, Vercel, or local development
+// For production OAuth, ensure BETTER_AUTH_URL is set in environment variables
+const appOrigin = process.env.BETTER_AUTH_URL || importedBaseURL.replace(/\/api\/auth$/, '');
 
 const authBasePath = ensureLeadingSlash(
   process.env.BETTER_AUTH_BASE_PATH || "/api/auth"
