@@ -1,166 +1,90 @@
 # Axite MCP Template
 
-**Production-ready starter template for building ChatGPT MCP (Model Context Protocol) apps with Next.js, Better Auth OAuth 2.1, and optional Stripe subscriptions.**
+**A lightweight, type-safe starter for building ChatGPT MCP apps with Next.js and Skybridge.**
 
-Build powerful AI-native applications that integrate seamlessly with ChatGPT and Claude. This template provides everything you need to get started: authentication, database, example tools, widgets, and deployment configs.
+This template provides a simplified, production-ready foundation with:
+- **Next.js App Router** structure
+- **Skybridge** integration for type-safe widgets
+- **Better Auth** (OAuth 2.1)
+- **Stripe** subscription support (optional)
+- **Drizzle ORM** with PostgreSQL
 
 ## ✨ Features
 
-- **🔐 OAuth 2.1 Authentication** - Better Auth with MCP plugin for ChatGPT/Claude integration
-- **💳 Optional Subscriptions** - Stripe integration with feature flags (easily disable if not needed)
-- **🛠️ 5 Example MCP Tools** - CRUD operations, external APIs, calculations, subscription management
-- **🎨 4 Example Widgets** - Interactive UI components that render in ChatGPT
-- **📊 PostgreSQL + Redis** - Production-ready database setup with Drizzle ORM
-- **🔒 Type-Safe** - End-to-end TypeScript with Zod validation
-- **🚀 Deploy Anywhere** - Vercel, Railway, or any Node.js hosting
-- **📝 Comprehensive Docs** - Inline comments and guides for every component
-- **🧪 Testing Setup** - Vitest + Playwright for integration and E2E tests
+- **🚀 Type-Safe End-to-End** - Automatic type inference from backend tools to frontend widgets.
+- **🔐 OAuth 2.1** - Built-in auth for ChatGPT/Claude integration.
+- **⚡ Next.js Native** - Widgets are standard Next.js pages.
+- **🔌 Skybridge Powered** - Use typed hooks (`useCallTool`, `useToolInfo`) instead of raw SDK calls.
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- Node.js 18+ and pnpm
-- PostgreSQL database
-- Redis instance
-- (Optional) Stripe account for subscriptions
-
-### 1. Clone and Install
+### 1. Install
 
 ```bash
-git clone https://github.com/yourusername/axite-mcp-template.git
-cd axite-mcp-template
 pnpm install
 ```
 
 ### 2. Configure Environment
 
-```bash
-cp .env.example .env
-```
+Copy `.env.example` to `.env` and fill in your details.
 
-Edit `.env` with your credentials. See `.env.example` for full documentation.
-
-### 3. Setup Database
-
-```bash
-pnpm db:push
-```
-
-### 4. Run Development Server
+### 3. Run Development Server
 
 ```bash
 pnpm dev
 ```
 
-Your MCP server is now running at `http://localhost:3000/mcp`
+Your MCP server is running at `http://localhost:3000/mcp`.
 
-## 📚 What's Included
+## 🛠️ Creating Tools & Widgets
 
-### MCP Tools (5 examples)
-
-1. **`get_user_items`** - Fetch user's items (auth + subscription)
-2. **`manage_item`** - CRUD operations (auth + subscription)
-3. **`get_weather`** - External API integration (free, no auth)
-4. **`calculate_roi`** - ROI calculator (free, no auth)
-5. **`manage_subscription`** - Stripe billing (auth required)
-
-### Widgets (4 examples)
-
-- **user-items** - Data display
-- **manage-item** - CRUD results
-- **weather** - API visualization
-- **roi-calculator** - Charts
-
-### Services (3 examples)
-
-- **ItemsService** - Database CRUD
-- **WeatherService** - External APIs with caching
-- **LoggerService** - Winston logging
-
-## 🛠️ Development
-
-### Key Commands
-
-```bash
-pnpm dev              # Start dev server
-pnpm build            # Production build
-pnpm db:push          # Push schema to database
-pnpm typecheck        # Type checking
-pnpm test             # Run tests
-```
-
-### Project Structure
-
-```
-├── app/mcp/route.ts       # MCP server
-├── app/widgets/           # Widget pages
-├── lib/
-│   ├── services/          # Business logic
-│   ├── types/             # TypeScript types
-│   └── utils/             # Helpers
-└── src/components/        # Widget components
-```
-
-## 📖 Adding Your Own Tools
-
-See [CLAUDE.md](CLAUDE.md) for comprehensive development guide.
-
-Quick example:
+### 1. Define Tool & Widget (`app/mcp/route.ts`)
 
 ```typescript
-// app/mcp/route.ts
-server.registerTool("my_tool", config, async ({ param }) => {
-  const authCheck = await requireAuth(session, "my feature");
-  if (authCheck) return authCheck;
-
-  return createSuccessResponse("Success!", { data });
-});
+server.registerWidget(
+  "my_tool",
+  { title: "My Tool", widgetPath: "/widgets/my-tool" },
+  {
+    description: "Does something cool",
+    inputSchema: z.object({ query: z.string() })
+  },
+  async ({ query }) => {
+    return createSuccessResponse("Done", { result: query });
+  }
+);
 ```
 
-## 🎨 Customization
+### 2. Create Widget Page (`app/widgets/my-tool/page.tsx`)
 
-### Disable Subscriptions
+```tsx
+import MyWidget from "@/src/components/my-widget";
 
-```env
-ENABLE_SUBSCRIPTIONS=false
+export default function MyToolPage() {
+  return <MyWidget />;
+}
 ```
 
-### Add Feature Flags
+### 3. Build Widget Component (`src/components/my-widget/index.tsx`)
 
-```typescript
-// lib/config/features.ts
-export const FEATURES = {
-  MY_FEATURE: process.env.ENABLE_MY_FEATURE === "true",
-};
+```tsx
+"use client";
+import { useToolInfo } from "@/src/skybridge";
+
+export default function MyWidget() {
+  // Types are automatically inferred!
+  const { output } = useToolInfo();
+
+  if (!output) return <div>Loading...</div>;
+  return <div>Result: {output.structuredContent.result}</div>;
+}
 ```
 
-## 🚀 Deployment
+## 📚 Documentation
 
-**Railway:**
-```bash
-railway up
-```
-
-**Vercel:**
-```bash
-vercel
-```
-
-See `docs/DEPLOYMENT.md` for details.
+- `app/mcp/route.ts` - Main server entry point
+- `src/skybridge.ts` - Type definitions and hooks
+- `lib/db/schema.ts` - Database schema
 
 ## 📄 License
 
-MIT License - see LICENSE file.
-
-## 🙏 Built With
-
-- [Next.js](https://nextjs.org/)
-- [Better Auth](https://better-auth.com/)
-- [Drizzle ORM](https://orm.drizzle.team/)
-- [MCP SDK](https://github.com/modelcontextprotocol/sdk)
-- [OpenAI Apps SDK](https://platform.openai.com/docs/apps)
-
----
-
-**Ready to build?** Clone and customize! 🚀
+MIT

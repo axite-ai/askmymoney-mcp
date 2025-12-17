@@ -47,9 +47,11 @@ pool.on('error', (error) => {
 });
 
 // Create Stripe client for subscription management
-const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: "2025-10-29.clover",
-});
+const stripeClient = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: "2025-10-29.clover",
+    })
+  : null;
 
 // Helper utilities for composing URLs without duplicate slashes
 const stripTrailingSlash = (value: string) =>
@@ -195,11 +197,11 @@ export const auth = betterAuth({
       // JWT plugin provides JWKS endpoint for token verification
       // Required for OAuth 2.1 compliance with ChatGPT
       disableSettingJwtHeader: true, // OAuth compliance - don't set JWT in response headers
-      jwt: {
-        issuer: baseURL,
-        audience: resourceURL,
-        expirationTime: "1h",
-      },
+      // jwt: {
+      //   issuer: baseURL,
+      //   audience: resourceURL,
+      //   expirationTime: "1h",
+      // },
       jwks: {
         keyPairConfig: {
           alg: "RS256", // Use RS256 for better compatibility with OAuth clients
@@ -223,15 +225,7 @@ export const auth = betterAuth({
           "email",
           "claudeai",
           "offline_access",
-          "balances:read",
-          "transactions:read",
-          "insights:read",
-          "health:read",
-          "investments:read",
-          "liabilities:read",
           "subscription:manage",
-          "accounts:read",
-          "accounts:write",
         ],
         trustedClients: [
           {
@@ -261,7 +255,7 @@ export const auth = betterAuth({
         ],
       },
     }),
-    stripe({
+    ...(stripeClient ? [stripe({
       stripeClient,
       stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
       createCustomerOnSignUp: true,
@@ -411,34 +405,8 @@ export const auth = betterAuth({
             console.error("[Stripe] Failed to verify subscription in database:", error);
           }
 
-          // Send subscription confirmation email
-          try {
-            const { EmailService } = await import("@/lib/services/email-service");
-
-            // Get user details from database using Drizzle
-            const userResult = await db
-              .select({ email: schema.user.email, name: schema.user.name })
-              .from(schema.user)
-              .where(eq(schema.user.id, subscription.referenceId))
-              .limit(1);
-
-            const user = userResult[0];
-            if (user?.email) {
-              const userName = user.name || "there";
-              const planName = plan.name.charAt(0).toUpperCase() + plan.name.slice(1);
-
-              await EmailService.sendSubscriptionConfirmation(
-                user.email,
-                userName,
-                planName
-              );
-
-              console.log("[Stripe] Subscription confirmation email sent to", user.email);
-            }
-          } catch (error) {
-            console.error("[Stripe] Failed to send subscription confirmation email:", error);
-            // Don't throw - email failure shouldn't block subscription
-          }
+          // Email service removed for clean template
+          // To add email confirmations, implement an EmailService and call it here.
         },
         onSubscriptionUpdate: async ({
           subscription,
@@ -477,7 +445,7 @@ export const auth = betterAuth({
           });
         },
       },
-    }),
+    })] : []),
   ],
 
   // Rate limiting configuration (uses Redis)

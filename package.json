@@ -3,7 +3,16 @@
   "version": "1.0.0",
   "private": false,
   "description": "Production-ready starter template for building ChatGPT MCP apps with Next.js, Better Auth, and optional Stripe subscriptions",
-  "keywords": ["mcp", "chatgpt", "openai", "template", "starter", "nextjs", "better-auth", "oauth"],
+  "keywords": [
+    "mcp",
+    "chatgpt",
+    "openai",
+    "template",
+    "starter",
+    "nextjs",
+    "better-auth",
+    "oauth"
+  ],
   "author": "Axite Contributors",
   "license": "MIT",
   "repository": {
@@ -63,6 +72,7 @@
     "react-dom": "19.1.0",
     "react-qr-code": "^2.0.18",
     "resend": "^6.4.0",
+    "skybridge": "^0.11.1",
     "stripe": "^19.3.1",
     "tailwind-merge": "^3.4.0",
     "winston": "^3.18.3",

@@ -1,6 +1,7 @@
 // Detect deployment platform and construct base URL
-// Priority: Explicit BASE_URL > Railway > Vercel > Error in production
+// Priority: Explicit BASE_URL > BETTER_AUTH_URL > Railway > Vercel
 const explicitUrl = process.env.BASE_URL;
+const betterAuthUrl = process.env.BETTER_AUTH_URL;
 const railwayUrl = process.env.RAILWAY_PUBLIC_DOMAIN
   ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
   : process.env.RAILWAY_STATIC_URL
@@ -8,11 +9,8 @@ const railwayUrl = process.env.RAILWAY_PUBLIC_DOMAIN
   : undefined;
 const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined;
 
-// Development fallback (only used in local development)
-const localUrl = "http://localhost:3000";
-
-// Priority: Explicit > Railway > Vercel > Local (dev only)
-// In production, env validation will ensure at least one platform URL is set
+// Priority: Explicit > Better Auth URL > Railway > Vercel
+// No localhost fallback - URL must be explicitly configured
 export const baseURL =
-  explicitUrl || railwayUrl || vercelUrl || localUrl;
+  explicitUrl || betterAuthUrl || railwayUrl || vercelUrl || "";
 

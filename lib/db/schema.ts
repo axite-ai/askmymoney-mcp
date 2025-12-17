@@ -242,7 +242,7 @@ export const userRelations = relations(user, ({ many }) => ({
   oauthApplications: many(oauthApplication),
   oauthAccessTokens: many(oauthAccessToken),
   oauthConsents: many(oauthConsent),
-  userItems: many(userItems),
+
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -315,66 +315,7 @@ export const oauthConsentRelations = relations(oauthConsent, ({ one }) => ({
 // TEMPLATE: Customize these tables for your application needs
 // ============================================================================
 
-/**
- * Item Status Lifecycle
- * - 'active': Item is active and available
- * - 'archived': Item is archived but not deleted
- * - 'deleted': Item is soft deleted
- */
-export const ItemStatus = pgEnum("item_status", [
-  "active",
-  "archived",
-  "deleted",
-]);
 
-/**
- * Example user items table - demonstrates a typical CRUD resource
- * TEMPLATE: Customize or replace with your own entities
- */
-export const userItems = pgTable(
-  "user_items",
-  {
-    id: text("id")
-      .primaryKey()
-      .$defaultFn(() => createId()),
-
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-
-    title: text("title").notNull(),
-    description: text("description"),
-
-    status: ItemStatus("status").default("active").notNull(),
-
-    // Flexible metadata field for custom properties
-    metadata: jsonb("metadata"),
-
-    // Ordering/priority
-    order: integer("order").default(0).notNull(),
-
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-
-    archivedAt: timestamp("archived_at"),
-    deletedAt: timestamp("deleted_at"),
-  },
-  (table) => ({
-    userIdIndex: index("user_items_user_id_idx").on(table.userId),
-    statusIndex: index("user_items_status_idx").on(table.status),
-    createdAtIndex: index("user_items_created_at_idx").on(table.createdAt),
-  })
-);
-
-export const userItemsRelations = relations(userItems, ({ one }) => ({
-  user: one(user, {
-    fields: [userItems.userId],
-    references: [user.id],
-  }),
-}));
 
 /**
  * App-level settings and configuration

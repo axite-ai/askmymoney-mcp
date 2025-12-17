@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
       ],
     },
   },
+  serverExternalPackages: ["skybridge", "vite", "esbuild", "lightningcss"],
 };
 
 export default nextConfig;
