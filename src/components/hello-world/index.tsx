@@ -4,16 +4,14 @@ import { useToolInfo } from "@/src/skybridge";
 import type { HelloWorldContent } from "@/lib/types/tool-responses";
 
 export default function HelloWorldWidget() {
-  // @ts-ignore - The AppType inference is powerful but for a clean template start
-  // we are skipping the strict type connection here for simplicity.
   const { output } = useToolInfo();
-  const toolOutput = output?.structuredContent as HelloWorldContent;
+  const data = output as { structuredContent: HelloWorldContent } | undefined;
 
-  if (!toolOutput) {
+  if (!data?.structuredContent) {
     return <div className="p-4">Loading...</div>;
   }
 
-  const { greeting, name, timestamp } = toolOutput;
+  const { greeting, name, timestamp } = data.structuredContent;
 
   return (
     <div className="p-6 bg-surface text-default rounded-lg border border-default">

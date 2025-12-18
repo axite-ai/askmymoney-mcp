@@ -33,26 +33,25 @@ pnpm db:studio       # Launch Drizzle Studio GUI
 
 ## Architecture
 
-### 1. MCP Server (`app/mcp/route.ts`)
+### 1. MCP Server (`app/[transport]/route.ts`)
 
-- **Based on Skybridge**: Extends `McpServer` from `skybridge/server`.
-- **Next.js Aware**: Uses custom `NextMcpServer` class to fetch widget HTML from Next.js dynamic routes.
-- **Factory Pattern**: `createAxiteServer` creates the server instance.
-- **AppType Export**: Exports `type AppType` which the frontend uses for type inference.
+- **mcp-handler**: Uses `createMcpHandler()` with Better Auth OAuth.
+- **Tool Registration**: Register tools with `server.tool()` and resources with `server.resource()`.
+- **AppType Export**: Exports `type AppType` for frontend type inference.
 
-**Adding a Tool & Widget:**
+**Adding a Tool:**
 
 ```typescript
-// app/mcp/route.ts
-server.registerWidget(
+// app/[transport]/route.ts
+server.tool(
   "tool_name",
-  { title: "Widget Title", widgetPath: "/widgets/path" },
-  {
-    description: "Tool description",
-    inputSchema: z.object({ ... })
-  },
+  "Tool description",
+  { name: z.string().optional() },
   async (args) => {
-    return createSuccessResponse("Text result", { structured: "data" });
+    return {
+      content: [{ type: "text", text: "Hello!" }],
+      structuredContent: { greeting: "Hello", name: args.name },
+    };
   }
 );
 ```
@@ -61,25 +60,32 @@ server.registerWidget(
 
 - **Pages**: `app/widgets/my-widget/page.tsx` renders the widget component.
 - **Components**: `src/components/my-widget/index.tsx` contains the logic.
-- **Hooks**: **ALWAYS** use typed hooks from `@/src/skybridge` (not raw SDK hooks).
+- **Hooks**: **ALWAYS** import from `@/src/skybridge` (not `skybridge/web` directly).
 
 **Widget Pattern:**
 
 ```tsx
 "use client";
 import { useToolInfo } from "@/src/skybridge";
+import type { MyContentType } from "@/lib/types/tool-responses";
 
 export default function MyWidget() {
-  const { output } = useToolInfo(); // Typed automatically!
-  // ...
+  const { output } = useToolInfo();
+  const data = output as { structuredContent: MyContentType } | undefined;
+
+  if (!data?.structuredContent) {
+    return <div>Loading...</div>;
+  }
+
+  return <div>{data.structuredContent.greeting}</div>;
 }
 ```
 
 ### 3. Skybridge Glue (`src/skybridge.ts`)
 
-- **Single Source of Truth**: This file connects the backend types to the frontend hooks.
-- **Generated Hooks**: `useCallTool` is generated via `generateHelpers<AppType>()`.
-- **Exports**: Re-exports useful hooks like `useWidgetState`, `useTheme`, `useDisplayMode`.
+- **Single Source of Truth**: Re-exports Skybridge hooks for consistent imports.
+- **Typed useCallTool**: Generated via `generateHelpers<AppType>()` for tool name autocomplete.
+- **Direct Re-exports**: `useToolInfo`, `useWidgetState`, `useTheme`, `useDisplayMode`.
 
 ### 4. Authentication (`lib/auth/index.ts`)
 
@@ -94,7 +100,8 @@ export default function MyWidget() {
 
 ## Best Practices
 
-1.  **Strict Typing**: Do not manually type `ToolOutput` interfaces in widgets. Rely on inference from `useToolInfo()`.
-2.  **No Magic Strings**: Tool names in `useCallTool("tool_name")` are checked against the backend definition.
-3.  **Bootstrap**: `app/layout.tsx` includes `<NextChatSDKBootstrap>`. Do not remove it; it patches the browser environment for the ChatGPT iframe.
-4.  **Feature Flags**: Use `lib/config/features.ts` to toggle optional modules like Subscriptions.
+1.  **Import from Skybridge**: Always use `@/src/skybridge` for hooks, never `skybridge/web` directly.
+2.  **Type Casting**: Cast `output` to your content type: `output as { structuredContent: MyType } | undefined`.
+3.  **No Magic Strings**: Tool names in `useCallTool("tool_name")` are validated against `AppType`.
+4.  **Bootstrap**: `app/layout.tsx` includes `<NextChatSDKBootstrap>`. Do not remove it.
+5.  **Feature Flags**: Use `lib/config/features.ts` to toggle optional modules like Subscriptions.

@@ -2,10 +2,10 @@
 
 import { useSession } from "@/lib/auth/client";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
 import { signIn } from "@/lib/auth/client";
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackURL") || "/";
@@ -67,5 +67,26 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function LoginFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-8 rounded-lg border p-6 shadow-lg bg-surface text-foreground">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold tracking-tight">Welcome back</h2>
+          <p className="mt-2 text-sm text-gray-400">Loading...</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginFallback />}>
+      <LoginContent />
+    </Suspense>
   );
 }
