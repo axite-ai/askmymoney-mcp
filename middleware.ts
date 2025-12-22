@@ -34,12 +34,12 @@ export function middleware(request: NextRequest) {
   // TEMPLATE: Add your third-party service domains (e.g., payment processors, analytics) to these directives
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.claude.ai https://chat.openai.com https://challenges.cloudflare.com https://*.cloudflare.com",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' data: https://fonts.gstatic.com",
-    "img-src 'self' data:",
+    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.claude.ai https://chat.openai.com https://challenges.cloudflare.com https://*.cloudflare.com https://*.oaistatic.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.oaistatic.com",
+    "font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com https://*.oaistatic.com",
+    "img-src 'self' data: https://*.oaistatic.com",
     `frame-src 'self' https://*.claude.ai https://*.oaiusercontent.com https://chat.openai.com`,
-    "connect-src 'self' https://*.claude.ai https://chat.openai.com",
+    "connect-src 'self' https://*.claude.ai https://chat.openai.com https://*.cloudflare.com",
     `base-uri 'self'`,
     "form-action 'self'",
     "frame-ancestors 'self' https://*.claude.ai https://*.oaiusercontent.com https://chat.openai.com",
