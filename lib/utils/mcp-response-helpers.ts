@@ -9,6 +9,9 @@ import type {
 } from "@/lib/types/mcp-responses";
 import type { AuthChallengeContent } from "@/lib/types/tool-responses";
 import { createTextContent } from "@/lib/types/mcp-responses";
+import { createUIResource } from '@mcp-ui/server';
+import type { CreateUIResourceOptions } from '@mcp-ui/server';
+import { baseURL } from "@/baseUrl";
 
 /**
  * Creates a generic error response that matches AuthChallengeContent structure
@@ -31,16 +34,24 @@ export const createErrorResponse = (
 
 /**
  * Creates a success response with structured content
+ *
+ * Following Vercel's Pattern 2 approach:
+ * - Tools return text content + structuredContent + _meta
+ * - Widgets are registered separately as resources
+ * - ChatGPT fetches the widget via outputTemplate reference
  */
 export const createSuccessResponse = <T extends Record<string, unknown>>(
   text: string,
   structuredContent: T,
   meta?: Partial<OpenAIResponseMetadata>
-) => ({
-  content: [createTextContent(text)],
-  structuredContent,
-  ...(meta && { _meta: meta })
-});
+): MCPToolResponse<T, OpenAIResponseMetadata> => {
+  return {
+    content: [createTextContent(text)],
+    structuredContent,
+    isError: false,
+    ...(meta && { _meta: meta as OpenAIResponseMetadata })
+  };
+};
 
 /**
  * Creates an authentication challenge response

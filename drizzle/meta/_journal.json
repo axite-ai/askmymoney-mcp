@@ -15,6 +15,13 @@
       "when": 1764638302431,
       "tag": "0001_tranquil_gambit",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1766448124718,
+      "tag": "0002_nosy_mulholland_black",
+      "breakpoints": true
     }
   ]
 }

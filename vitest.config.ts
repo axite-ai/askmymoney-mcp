@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       globals: true,
       globalSetup: './tests/global-setup.ts',
       setupFiles: ['./tests/setup-files.ts'],
-      include: ['**/*.{test,spec}.{ts,tsx}'],
+      include: ['tests/**/*.{test,spec}.{ts,tsx}'],
       env,
       exclude: ['**/node_modules/**', '**/dist/**', '**/e2e/**', '**/.next/**'],
       coverage: {

@@ -33,6 +33,43 @@ pnpm db:studio       # Launch Drizzle Studio GUI
 
 ## Architecture
 
+### @mcp-ui Integration Architecture
+
+This project uses @mcp-ui for widget rendering with the following architecture:
+
+**How It Works:**
+
+1. **Server-side (@mcp-ui/server):**
+   - `createUIResource()` creates UI resources with Apps SDK adapter
+   - Apps SDK adapter automatically injects scripts into iframe HTML
+   - These scripts populate `window.openai` with Apps SDK API
+
+2. **Client-side (Custom Hooks):**
+   - `src/mcp-ui-hooks.ts` provides type-safe hooks to access `window.openai`
+   - These are custom hooks, NOT from @mcp-ui/client
+   - @mcp-ui/client only exports `UIResourceRenderer` (for Remote DOM) and utilities
+
+3. **Widget Pattern:**
+   - Widgets are served as external iframes (`externalUrl` type)
+   - Apps SDK adapter script runs in iframe and creates `window.openai`
+   - Widget components use custom hooks to access `window.openai`
+
+**Why Custom Hooks?**
+
+@mcp-ui/client does NOT provide React hooks. Our custom hooks bridge:
+- @mcp-ui/server's Apps SDK adapter (which populates `window.openai`)
+- React widgets that need type-safe access to Apps SDK APIs
+
+**Available Hooks** (from `src/mcp-ui-hooks.ts`):
+- `useToolInfo()` - Access tool output and metadata
+- `useDisplayMode()` - Get/set display mode
+- `useWidgetState<T>()` - Persistent widget state
+- `useTheme()` - Current theme
+- `useCallTool()` - Call other tools (type-safe)
+- `useSendFollowUpMessage()` - Send messages
+- `useOpenExternal()` - Open external URLs
+- `useOpenAiGlobal(key)` - Access global values
+
 ### 1. MCP Server (`app/[transport]/route.ts`)
 
 - **mcp-handler**: Uses `createMcpHandler()` with Better Auth OAuth.
