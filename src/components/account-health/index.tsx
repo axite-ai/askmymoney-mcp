@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useEffect } from "react";
+import { motion } from "framer-motion";
 import {
   Expand,
   Error,
@@ -16,6 +17,9 @@ import { cn } from "@/lib/utils/cn";
 import { useToolInfo, useDisplayMode, useOpenAiGlobal } from "@/src/mcp-ui-hooks";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
 import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
+import { FollowUpButton, FOLLOW_UP_PROMPTS } from "@/src/components/shared/follow-up-button";
+import { fadeSlideUp, staggerContainer, listItem } from "@/src/lib/animation-variants";
+import type { SafeArea, UserAgent } from "@/src/mcp-ui-hooks";
 
 interface HealthAccount {
   account_id: string;
@@ -201,8 +205,38 @@ function HealthStatusCard({
 export default function AccountHealth() {
   const toolInfo = useToolInfo();
   const [displayMode, requestDisplayMode] = useDisplayMode();
-  const maxHeight = useOpenAiGlobal("maxHeight") as number | string | undefined;
+  const maxHeight = useOpenAiGlobal("maxHeight") as number | undefined;
+  const safeArea = useOpenAiGlobal("safeArea") as SafeArea | undefined;
+  const userAgent = useOpenAiGlobal("userAgent") as UserAgent | undefined;
+
   const isFullscreen = displayMode === "fullscreen";
+  const isInline = displayMode === "inline";
+  const isMobile = userAgent?.device?.type === "mobile" || (typeof maxHeight === "number" && maxHeight < 720);
+
+  // Safe area insets for mobile devices with notches
+  const safeInsets = useMemo(() => ({
+    paddingTop: safeArea?.insets?.top ?? 0,
+    paddingBottom: safeArea?.insets?.bottom ?? 0,
+    paddingLeft: safeArea?.insets?.left ?? 0,
+    paddingRight: safeArea?.insets?.right ?? 0,
+  }), [safeArea]);
+
+  // Dynamic padding based on display mode
+  const containerPadding = isInline ? 12 : isMobile ? 20 : 32;
+
+  // Keyboard navigation for fullscreen mode
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        requestDisplayMode("inline");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen, requestDisplayMode]);
 
   // Extract data from toolInfo
   // Note: toolInfo.output IS the structuredContent directly in Skybridge
@@ -237,14 +271,18 @@ export default function AccountHealth() {
   const overallStatus = toolOutput.overallStatus || "healthy";
 
   return (
-    <div
+    <motion.div
+      variants={fadeSlideUp}
+      initial="initial"
+      animate="animate"
       className={cn(
         "antialiased w-full relative bg-transparent text-default",
         !isFullscreen && "overflow-hidden"
       )}
       style={{
-        maxHeight: maxHeight ?? undefined,
-        height: isFullscreen ? maxHeight ?? undefined : undefined,
+        maxHeight: typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : undefined,
+        height: isFullscreen ? (typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : "100vh") : 400,
+        ...safeInsets,
       }}
     >
       {/* Fullscreen expand button */}
@@ -263,10 +301,8 @@ export default function AccountHealth() {
 
       {/* Content */}
       <div
-        className={cn(
-          "w-full h-full overflow-y-auto",
-          isFullscreen ? "p-8" : "p-0"
-        )}
+        className="w-full h-full overflow-y-auto"
+        style={{ padding: isFullscreen ? containerPadding : 0 }}
       >
         {/* Header */}
         {isFullscreen && (
@@ -394,9 +430,28 @@ export default function AccountHealth() {
                 <p className="text-sm text-secondary">We'll let you know if anything needs attention.</p>
               </div>
             )}
+
+            {/* Follow-up Actions */}
+            <motion.div
+              variants={fadeSlideUp}
+              initial="initial"
+              animate="animate"
+              className="mt-6 flex flex-wrap gap-3"
+            >
+              <FollowUpButton
+                prompt={FOLLOW_UP_PROMPTS.healthOverview}
+                label="Get Health Analysis"
+              />
+              {totalWarnings > 0 && (
+                <FollowUpButton
+                  prompt="Help me resolve these account health warnings"
+                  label="Help Resolve Issues"
+                />
+              )}
+            </motion.div>
           </>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -1,12 +1,15 @@
 /**
  * Subscription Helper Functions
  *
- * Utilities for checking subscription status, tiers, and limits using Better Auth Stripe plugin
+ * Utilities for checking subscription status, tiers, and limits using Better Auth Stripe plugin.
+ * When FEATURES.SUBSCRIPTIONS is disabled, all users get free-tier access (2 accounts).
  */
 
 import { db } from "@/lib/db";
 import { subscription } from "@/lib/db/schema";
 import { eq, and, inArray, desc, count as drizzleCount } from "drizzle-orm";
+import { FEATURES } from "@/lib/config/features";
+import { PLAN_LIMITS, FREE_PLAN_NAME, type PlanName } from "@/lib/utils/plan-limits";
 
 /**
  * Get user's subscription from Better Auth Stripe plugin
@@ -67,38 +70,44 @@ export async function getUserSubscription(userId: string) {
 
 /**
  * Check if user has an active subscription.
- * Returns the subscription object if status is 'active' or 'trialing', otherwise null.
+ * When subscriptions are disabled, returns a synthetic subscription-like object
+ * so callers that check truthiness still pass.
  */
 export async function hasActiveSubscription(userId: string) {
-  const subscription = await getUserSubscription(userId);
-  if (subscription?.status === 'active' || subscription?.status === 'trialing') {
-    return subscription;
+  if (!FEATURES.SUBSCRIPTIONS) {
+    return { status: 'active' as const, plan: FREE_PLAN_NAME };
+  }
+
+  const sub = await getUserSubscription(userId);
+  if (sub?.status === 'active' || sub?.status === 'trialing') {
+    return sub;
   }
   return null;
 }
 
 /**
  * Get user's subscription tier (plan name)
- * Returns 'basic', 'pro', 'enterprise', or null if no active subscription
+ * Returns 'free' when subscriptions are disabled.
  */
 export async function getSubscriptionTier(userId: string): Promise<string | null> {
-  const subscription = await getUserSubscription(userId);
-  return subscription?.plan || null;
+  if (!FEATURES.SUBSCRIPTIONS) {
+    return FREE_PLAN_NAME;
+  }
+
+  const sub = await getUserSubscription(userId);
+  return sub?.plan || null;
 }
 
 /**
- * Get subscription limits based on tier
+ * Get subscription limits based on tier.
+ * Uses PLAN_LIMITS as single source of truth.
  */
 export async function getSubscriptionLimits(userId: string) {
   const tier = await getSubscriptionTier(userId);
+  if (!tier) return null;
 
-  const LIMITS = {
-    basic: { maxAccounts: 3 },
-    pro: { maxAccounts: 10 },
-    enterprise: { maxAccounts: Infinity }
-  };
-
-  return tier ? LIMITS[tier as keyof typeof LIMITS] : null;
+  const limits = PLAN_LIMITS[tier as PlanName];
+  return limits ? { maxAccounts: limits.maxAccounts } : null;
 }
 
 /**
@@ -108,9 +117,16 @@ export async function canConnectMoreAccounts(userId: string, currentAccountCount
   const limits = await getSubscriptionLimits(userId);
 
   if (!limits) {
-    return false; // No subscription = can't connect accounts
+    return false;
   }
 
   return currentAccountCount < limits.maxAccounts;
 }
 
+/**
+ * Get effective plan for user.
+ * Returns 'free' when subscriptions are disabled, otherwise the subscription tier.
+ */
+export async function getEffectivePlan(userId: string): Promise<string | null> {
+  return getSubscriptionTier(userId);
+}

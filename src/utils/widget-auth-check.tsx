@@ -9,11 +9,9 @@
  * break server action bindings when loaded through the Skybridge widget path.
  */
 
-// TEMPLATE: Import your required shared components here.
-// We have commented these out as they are implementation specific,
-// but you should implement them if you need them.
-// import SubscriptionRequired from "@/src/components/subscription-required";
-// import SecurityRequired from "@/src/components/security-required";
+import PlaidRequired from "@/src/components/plaid-required";
+import SubscriptionRequired from "@/src/components/subscription-required";
+import SecurityRequired from "@/src/components/security-required";
 
 /**
  * Check widget auth state and return appropriate component if auth is required.
@@ -37,17 +35,20 @@
 export function checkWidgetAuth(toolOutput: any) {
   if (!toolOutput) return null;
 
-  // TEMPLATE: Add your own checks here based on your tool's error responses.
+  // Check for Security required (Passkey)
+  if (toolOutput.message === "Security setup required") {
+    return <SecurityRequired />;
+  }
 
-  // Example: Check for Security required (Passkey)
-  // if (toolOutput.message === "Security setup required") {
-  //   return <SecurityRequired />;
-  // }
+  // Check for Plaid connection required
+  if (toolOutput.message === "Bank connection required") {
+    return <PlaidRequired />;
+  }
 
-  // Example: Check for subscription required
-  // if (toolOutput.error_message === "Subscription required") {
-  //   return <SubscriptionRequired />;
-  // }
+  // Check for subscription required
+  if (toolOutput.error_message === "Subscription required") {
+    return <SubscriptionRequired />;
+  }
 
   // No auth issues
   return null;

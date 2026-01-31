@@ -91,7 +91,7 @@ export default function ExpenseCategorizerWidget() {
       )}
       style={{
         maxHeight: maxHeight ?? undefined,
-        height: isFullscreen ? maxHeight ?? undefined : undefined,
+        height: isFullscreen ? maxHeight ?? undefined : 400,
       }}
     >
       {/* Fullscreen expand button */}

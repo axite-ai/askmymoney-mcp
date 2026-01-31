@@ -7,7 +7,8 @@ import {
   integer,
   jsonb,
   index,
-  pgEnum
+  pgEnum,
+  decimal,
 } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
@@ -242,7 +243,6 @@ export const userRelations = relations(user, ({ many }) => ({
   oauthApplications: many(oauthApplication),
   oauthAccessTokens: many(oauthAccessToken),
   oauthConsents: many(oauthConsent),
-
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -311,11 +311,349 @@ export const oauthConsentRelations = relations(oauthConsent, ({ one }) => ({
 }));
 
 // ============================================================================
+// PLAID TABLES
+// ============================================================================
+
+/**
+ * Plaid Item Status
+ */
+export const PlaidItemStatus = pgEnum("plaid_item_status", [
+  "pending",
+  "active",
+  "error",
+  "revoked",
+  "deleted",
+]);
+
+/**
+ * Plaid Items - Represents a connection to a financial institution
+ */
+export const plaidItems = pgTable(
+  "plaid_items",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+
+    itemId: text("item_id").notNull().unique(),
+    accessToken: text("access_token").notNull(),
+
+    institutionId: text("institution_id"),
+    institutionName: text("institution_name"),
+
+    status: PlaidItemStatus("status").default("active"),
+
+    consentExpiresAt: timestamp("consent_expires_at"),
+    transactionsCursor: text("transactions_cursor"),
+
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    lastWebhookAt: timestamp("last_webhook_at"),
+
+    deletedAt: timestamp("deleted_at"),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+
+    newAccountsAvailable: jsonb("new_accounts_available"),
+  },
+  (table) => ({
+    itemIdIndex: index("plaid_items_item_id_idx").on(table.itemId),
+    userIdIndex: index("plaid_items_user_id_idx").on(table.userId),
+    statusIndex: index("plaid_items_status_idx").on(table.status),
+  })
+);
+
+/**
+ * Plaid Accounts - Bank accounts linked via Plaid
+ */
+export const plaidAccounts = pgTable(
+  "plaid_accounts",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+
+    itemId: text("item_id")
+      .notNull()
+      .references(() => plaidItems.itemId, { onDelete: "cascade" }),
+
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+
+    accountId: text("account_id").notNull().unique(),
+
+    name: text("name").notNull(),
+    mask: text("mask"),
+    officialName: text("official_name"),
+
+    currentBalance: decimal("current_balance", { precision: 28, scale: 10 }),
+    availableBalance: decimal("available_balance", { precision: 28, scale: 10 }),
+    isoCurrencyCode: text("iso_currency_code"),
+
+    type: text("type"),
+    subtype: text("subtype"),
+
+    persistentAccountId: text("persistent_account_id"),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => ({
+    accountIdIndex: index("plaid_accounts_account_id_idx").on(table.accountId),
+    userIdIndex: index("plaid_accounts_user_id_idx").on(table.userId),
+  })
+);
+
+/**
+ * Plaid Link Sessions - Tracks Plaid Link connection sessions
+ */
+export const plaidLinkSessions = pgTable(
+  "plaid_link_sessions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+
+    linkToken: text("link_token").notNull(),
+    linkSessionId: text("link_session_id"),
+    plaidUserToken: text("plaid_user_token"),
+
+    status: text("status").default("pending").notNull(),
+
+    publicTokens: jsonb("public_tokens"),
+    itemsAdded: integer("items_added").default(0).notNull(),
+
+    metadata: jsonb("metadata"),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => ({
+    userIdIndex: index("plaid_link_sessions_user_id_idx").on(table.userId),
+    linkTokenIndex: index("plaid_link_sessions_link_token_idx").on(table.linkToken),
+    linkSessionIdIndex: index("plaid_link_sessions_link_session_id_idx").on(table.linkSessionId),
+    statusIndex: index("plaid_link_sessions_status_idx").on(table.status),
+  })
+);
+
+/**
+ * Plaid Transactions - Financial transactions from Plaid
+ */
+export const plaidTransactions = pgTable(
+  "plaid_transactions",
+  {
+    transactionId: text("transaction_id").primaryKey(),
+
+    accountId: text("account_id")
+      .notNull()
+      .references(() => plaidAccounts.accountId),
+
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+
+    amount: decimal("amount", { precision: 28, scale: 10 }).notNull(),
+    isoCurrencyCode: text("iso_currency_code"),
+    unofficialCurrencyCode: text("unofficial_currency_code"),
+
+    categoryPrimary: text("category_primary"),
+    categoryDetailed: text("category_detailed"),
+    categoryConfidence: text("category_confidence"),
+
+    checkNumber: text("check_number"),
+
+    date: timestamp("date").notNull(),
+    datetime: timestamp("datetime"),
+    authorizedDate: timestamp("authorized_date"),
+    authorizedDatetime: timestamp("authorized_datetime"),
+
+    location: jsonb("location"),
+    merchantName: text("merchant_name"),
+    paymentChannel: text("payment_channel"),
+
+    pending: boolean("pending").default(false).notNull(),
+    pendingTransactionId: text("pending_transaction_id"),
+
+    transactionCode: text("transaction_code"),
+
+    name: text("name"),
+    originalDescription: text("original_description"),
+
+    logoUrl: text("logo_url"),
+    website: text("website"),
+    counterparties: jsonb("counterparties"),
+    paymentMeta: jsonb("payment_meta"),
+
+    rawData: jsonb("raw_data"),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => ({
+    transactionIdIndex: index("plaid_transactions_transaction_id_idx").on(table.transactionId),
+    accountIdIndex: index("plaid_transactions_account_id_idx").on(table.accountId),
+    userIdIndex: index("plaid_transactions_user_id_idx").on(table.userId),
+  })
+);
+
+/**
+ * Plaid Webhooks - Tracks webhook events from Plaid
+ */
+export const plaidWebhooks = pgTable(
+  "plaid_webhooks",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+
+    itemId: text("item_id"),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+
+    webhookType: text("webhook_type").notNull(),
+    webhookCode: text("webhook_code").notNull(),
+
+    errorCode: text("error_code"),
+
+    payload: jsonb("payload"),
+
+    processed: boolean("processed").default(false).notNull(),
+    processingError: jsonb("processing_error"),
+    retryCount: integer("retry_count").default(0).notNull(),
+
+    receivedAt: timestamp("received_at").defaultNow().notNull(),
+    processedAt: timestamp("processed_at"),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    itemIdProcessedIndex: index("plaid_webhooks_item_id_processed_idx").on(
+      table.itemId,
+      table.processed,
+      table.createdAt
+    ),
+    typeCodeItemIndex: index("plaid_webhooks_type_code_item_idx").on(
+      table.webhookType,
+      table.webhookCode,
+      table.itemId
+    ),
+  })
+);
+
+/**
+ * Plaid Item Deletions - Audit trail for deleted Plaid items
+ */
+export const plaidItemDeletions = pgTable(
+  "plaid_item_deletions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+
+    itemId: text("item_id").notNull(),
+
+    institutionId: text("institution_id"),
+    institutionName: text("institution_name"),
+
+    deletedAt: timestamp("deleted_at").defaultNow().notNull(),
+
+    reason: text("reason"),
+  },
+  (table) => ({
+    userIdDeletedAtIndex: index("plaid_item_deletions_user_id_deleted_at_idx").on(
+      table.userId,
+      table.deletedAt
+    ),
+  })
+);
+
+// ============================================================================
+// PLAID RELATIONS
+// ============================================================================
+
+export const plaidItemsRelations = relations(plaidItems, ({ one, many }) => ({
+  user: one(user, {
+    fields: [plaidItems.userId],
+    references: [user.id],
+  }),
+  accounts: many(plaidAccounts),
+}));
+
+export const plaidAccountsRelations = relations(plaidAccounts, ({ one, many }) => ({
+  item: one(plaidItems, {
+    fields: [plaidAccounts.itemId],
+    references: [plaidItems.itemId],
+  }),
+  user: one(user, {
+    fields: [plaidAccounts.userId],
+    references: [user.id],
+  }),
+  transactions: many(plaidTransactions),
+}));
+
+export const plaidLinkSessionsRelations = relations(plaidLinkSessions, ({ one }) => ({
+  user: one(user, {
+    fields: [plaidLinkSessions.userId],
+    references: [user.id],
+  }),
+}));
+
+export const plaidTransactionsRelations = relations(plaidTransactions, ({ one }) => ({
+  account: one(plaidAccounts, {
+    fields: [plaidTransactions.accountId],
+    references: [plaidAccounts.accountId],
+  }),
+  user: one(user, {
+    fields: [plaidTransactions.userId],
+    references: [user.id],
+  }),
+}));
+
+export const plaidWebhooksRelations = relations(plaidWebhooks, ({ one }) => ({
+  user: one(user, {
+    fields: [plaidWebhooks.userId],
+    references: [user.id],
+  }),
+}));
+
+export const plaidItemDeletionsRelations = relations(plaidItemDeletions, ({ one }) => ({
+  user: one(user, {
+    fields: [plaidItemDeletions.userId],
+    references: [user.id],
+  }),
+}));
+
+// ============================================================================
 // APPLICATION TABLES
 // TEMPLATE: Customize these tables for your application needs
 // ============================================================================
-
-
 
 /**
  * App-level settings and configuration

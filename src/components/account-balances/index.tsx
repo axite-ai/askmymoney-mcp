@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Expand,
   ChevronDown,
@@ -16,8 +17,11 @@ import { useToolInfo, useWidgetState, useDisplayMode, useOpenAiGlobal } from "@/
 import { formatCurrency } from "@/src/utils/format";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
 import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
+import { FollowUpButton, FOLLOW_UP_PROMPTS } from "@/src/components/shared/follow-up-button";
 import { cn } from "@/lib/utils/cn";
+import { fadeSlideUp, staggerContainer, listItem } from "@/src/lib/animation-variants";
 import type { AccountOverviewContent } from "@/lib/types/tool-responses";
+import type { SafeArea, UserAgent } from "@/src/mcp-ui-hooks";
 
 interface Account {
   account_id: string;
@@ -149,8 +153,35 @@ export default function AccountBalances() {
   });
 
   const [displayMode, requestDisplayMode] = useDisplayMode();
-  const maxHeight = useOpenAiGlobal("maxHeight") as number | string | undefined;
+  const maxHeight = useOpenAiGlobal("maxHeight") as number | undefined;
+  const safeArea = useOpenAiGlobal("safeArea") as SafeArea | undefined;
+  const userAgent = useOpenAiGlobal("userAgent") as UserAgent | undefined;
+
   const isFullscreen = displayMode === "fullscreen";
+  const isInline = displayMode === "inline";
+  const isMobile = userAgent?.device?.type === "mobile" || (typeof maxHeight === "number" && maxHeight < 720);
+
+  // Safe area insets for mobile devices with notches
+  const safeInsets = useMemo(() => ({
+    paddingTop: safeArea?.insets?.top ?? 0,
+    paddingBottom: safeArea?.insets?.bottom ?? 0,
+    paddingLeft: safeArea?.insets?.left ?? 0,
+    paddingRight: safeArea?.insets?.right ?? 0,
+  }), [safeArea]);
+
+  // Keyboard navigation for fullscreen mode
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        requestDisplayMode("inline");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen, requestDisplayMode]);
 
   // Extract data from toolInfo
   // Note: toolInfo.output IS the structuredContent directly in Skybridge
@@ -204,12 +235,19 @@ export default function AccountBalances() {
     );
   }
 
+  // Dynamic padding based on display mode
+  const containerPadding = isInline ? 12 : isMobile ? 20 : 32;
+
   return (
-    <div
+    <motion.div
+      variants={fadeSlideUp}
+      initial="initial"
+      animate="animate"
       className={`antialiased w-full relative bg-transparent text-default ${!isFullscreen ? "overflow-hidden" : ""}`}
       style={{
-        maxHeight: maxHeight ?? undefined,
-        height: isFullscreen ? maxHeight ?? undefined : undefined,
+        maxHeight: typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : undefined,
+        height: isFullscreen ? (typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : "100vh") : 400,
+        ...safeInsets,
       }}
     >
       {/* Fullscreen expand button */}
@@ -228,7 +266,8 @@ export default function AccountBalances() {
 
       {/* Content */}
       <div
-        className={`w-full h-full overflow-y-auto ${isFullscreen ? "p-8" : "p-0"}`}
+        className="w-full h-full overflow-y-auto"
+        style={{ padding: isFullscreen ? containerPadding : 0 }}
       >
         {/* Header */}
         <div className="mb-6">
@@ -309,7 +348,12 @@ export default function AccountBalances() {
         )}
 
         {/* Account List */}
-        <div className="border border-subtle rounded-xl overflow-hidden bg-surface shadow-sm">
+        <motion.div
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+          className="border border-subtle rounded-xl overflow-hidden bg-surface shadow-sm"
+        >
           {accounts.map((account, index) => {
             const mappedAccount: Account = {
               account_id: account.id,
@@ -324,17 +368,40 @@ export default function AccountBalances() {
               }
             };
             return (
-              <div key={account.id} className={cn(index !== 0 && "border-t border-subtle")}>
+              <motion.div
+                key={account.id}
+                variants={listItem}
+                className={cn(index !== 0 && "border-t border-subtle")}
+              >
                 <AccountCard
                   account={mappedAccount}
                   isExpanded={uiState?.expandedAccountIds.includes(account.id) ?? false}
                   onToggle={() => toggleAccountExpanded(account.id)}
                 />
-              </div>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
+
+        {/* Follow-up Actions */}
+        {isFullscreen && (
+          <motion.div
+            variants={fadeSlideUp}
+            initial="initial"
+            animate="animate"
+            className="mt-6 flex flex-wrap gap-3"
+          >
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.createSavingsPlan()}
+              label="Create Savings Plan"
+            />
+            <FollowUpButton
+              prompt="Analyze my account balances and suggest how to optimize them"
+              label="Optimize Accounts"
+            />
+          </motion.div>
+        )}
       </div>
-    </div>
+    </motion.div>
   );
 }

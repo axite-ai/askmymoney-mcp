@@ -1,10 +1,12 @@
 "use client";
 
+import { useState, useMemo, useEffect } from "react";
+import { motion } from "framer-motion";
 import { useToolInfo, useDisplayMode, useOpenAiGlobal } from "@/src/mcp-ui-hooks";
 import type { RecurringPaymentsContent } from "@/lib/types/tool-responses";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
 import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
-import { useState } from "react";
+import { FollowUpButton, FOLLOW_UP_PROMPTS } from "@/src/components/shared/follow-up-button";
 import { EmptyMessage } from "@openai/apps-sdk-ui/components/EmptyMessage";
 import { Button } from "@openai/apps-sdk-ui/components/Button";
 import { Select } from "@openai/apps-sdk-ui/components/Select";
@@ -13,6 +15,8 @@ import { AnimateLayout } from "@openai/apps-sdk-ui/components/Transition";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/src/utils/format";
 import { Expand } from "@openai/apps-sdk-ui/components/Icon";
+import { fadeSlideUp, staggerContainer, listItem } from "@/src/lib/animation-variants";
+import type { SafeArea, UserAgent } from "@/src/mcp-ui-hooks";
 
 interface RecurringPayment {
   streamId: string;
@@ -34,8 +38,31 @@ export default function RecurringPaymentsWidget() {
   const [sortBy, setSortBy] = useState<"amount" | "date" | "merchant">("amount");
 
   const [displayMode, requestDisplayMode] = useDisplayMode();
-  const maxHeight = useOpenAiGlobal("maxHeight") as number | string | undefined;
+  const maxHeight = useOpenAiGlobal("maxHeight") as number | undefined;
+  const safeArea = useOpenAiGlobal("safeArea") as SafeArea | undefined;
+  const userAgent = useOpenAiGlobal("userAgent") as UserAgent | undefined;
+
   const isFullscreen = displayMode === "fullscreen";
+  const isInline = displayMode === "inline";
+  const isMobile = userAgent?.device?.type === "mobile" || (typeof maxHeight === "number" && maxHeight < 720);
+
+  const safeInsets = useMemo(() => ({
+    paddingTop: safeArea?.insets?.top ?? 0,
+    paddingBottom: safeArea?.insets?.bottom ?? 0,
+    paddingLeft: safeArea?.insets?.left ?? 0,
+    paddingRight: safeArea?.insets?.right ?? 0,
+  }), [safeArea]);
+
+  const containerPadding = isInline ? 12 : isMobile ? 20 : 32;
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") requestDisplayMode("inline");
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen, requestDisplayMode]);
 
   // Extract data from toolInfo
   // Note: toolInfo.output IS the structuredContent directly in Skybridge
@@ -77,14 +104,18 @@ export default function RecurringPaymentsWidget() {
   });
 
   return (
-    <div
+    <motion.div
+      variants={fadeSlideUp}
+      initial="initial"
+      animate="animate"
       className={cn(
         "antialiased w-full relative bg-transparent text-default",
         !isFullscreen && "overflow-hidden"
       )}
       style={{
-        maxHeight: maxHeight ?? undefined,
-        height: isFullscreen ? maxHeight ?? undefined : undefined,
+        maxHeight: typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : undefined,
+        height: isFullscreen ? (typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : "100vh") : 400,
+        ...safeInsets,
       }}
     >
       {/* Fullscreen expand button */}
@@ -102,7 +133,10 @@ export default function RecurringPaymentsWidget() {
       )}
 
       {/* Content */}
-      <div className={cn("w-full h-full overflow-y-auto", isFullscreen ? "p-8" : "p-0")}>
+      <div
+        className="w-full h-full overflow-y-auto"
+        style={{ padding: isFullscreen ? containerPadding : 0 }}
+      >
         {/* Header */}
         <div className="mb-6">
           <h1 className="heading-lg mb-2">Recurring Payments</h1>
@@ -215,7 +249,26 @@ export default function RecurringPaymentsWidget() {
             <EmptyMessage.Description>No payments match the current filters</EmptyMessage.Description>
           </EmptyMessage>
         )}
+
+        {/* Follow-up Actions */}
+        {isFullscreen && sortedStreams.length > 0 && (
+          <motion.div
+            variants={fadeSlideUp}
+            initial="initial"
+            animate="animate"
+            className="mt-6 flex flex-wrap gap-3"
+          >
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.findSubscriptionsToCancel}
+              label="Find Savings"
+            />
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.optimizeSubscriptions}
+              label="Optimize Subscriptions"
+            />
+          </motion.div>
+        )}
       </div>
-    </div>
+    </motion.div>
   );
 }

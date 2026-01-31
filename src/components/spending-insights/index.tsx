@@ -1,16 +1,19 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Expand, Trending } from "@openai/apps-sdk-ui/components/Icon";
+import { Expand, Trending, ExternalLink } from "@openai/apps-sdk-ui/components/Icon";
 import { Button } from "@openai/apps-sdk-ui/components/Button";
-import { useToolInfo, useWidgetState, useDisplayMode, useOpenAiGlobal } from "@/src/mcp-ui-hooks";
+import { useToolInfo, useWidgetState, useDisplayMode, useOpenAiGlobal, useCallTool } from "@/src/mcp-ui-hooks";
 import { formatCurrency, formatPercent } from "@/src/utils/format";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
 import { cn } from "@/lib/utils/cn";
 import { EmptyMessage } from "@openai/apps-sdk-ui/components/EmptyMessage";
 import { AnimateLayout } from "@openai/apps-sdk-ui/components/Transition";
 import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
+import { FollowUpButton, FOLLOW_UP_PROMPTS } from "@/src/components/shared/follow-up-button";
+import { fadeSlideUp, staggerContainer, listItem } from "@/src/lib/animation-variants";
+import type { SafeArea, UserAgent } from "@/src/mcp-ui-hooks";
 
 interface Category {
   category: string;
@@ -229,8 +232,48 @@ export default function SpendingInsights() {
   });
 
   const [displayMode, requestDisplayMode] = useDisplayMode();
-  const maxHeight = useOpenAiGlobal("maxHeight") as number | string | undefined;
+  const maxHeight = useOpenAiGlobal("maxHeight") as number | undefined;
+  const safeArea = useOpenAiGlobal("safeArea") as SafeArea | undefined;
+  const userAgent = useOpenAiGlobal("userAgent") as UserAgent | undefined;
+  const callTool = useCallTool();
+
   const isFullscreen = displayMode === "fullscreen";
+  const isInline = displayMode === "inline";
+  const isMobile = userAgent?.device?.type === "mobile" || (typeof maxHeight === "number" && maxHeight < 720);
+
+  // Safe area insets for mobile devices with notches
+  const safeInsets = useMemo(() => ({
+    paddingTop: safeArea?.insets?.top ?? 0,
+    paddingBottom: safeArea?.insets?.bottom ?? 0,
+    paddingLeft: safeArea?.insets?.left ?? 0,
+    paddingRight: safeArea?.insets?.right ?? 0,
+  }), [safeArea]);
+
+  // Dynamic padding based on display mode
+  const containerPadding = isInline ? 12 : isMobile ? 20 : 32;
+
+  // Keyboard navigation for fullscreen mode
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        requestDisplayMode("inline");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen, requestDisplayMode]);
+
+  // Inter-widget tool call: show transactions for a category
+  const showCategoryTransactions = useCallback(async (categoryName: string) => {
+    try {
+      await callTool("askmymoney_get_transactions", { category: categoryName });
+    } catch (error) {
+      console.error("[SpendingInsights] Failed to call transactions tool:", error);
+    }
+  }, [callTool]);
 
   // Extract data from toolInfo
   // Note: toolInfo.output IS the structuredContent directly in Skybridge
@@ -282,11 +325,15 @@ export default function SpendingInsights() {
   categoriesWithMetadata.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
 
   return (
-    <div
+    <motion.div
+      variants={fadeSlideUp}
+      initial="initial"
+      animate="animate"
       className={`antialiased w-full relative bg-transparent text-default ${!isFullscreen ? "overflow-hidden" : ""}`}
       style={{
-        maxHeight: maxHeight ?? undefined,
-        height: isFullscreen ? maxHeight ?? undefined : undefined,
+        maxHeight: typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : undefined,
+        height: isFullscreen ? (typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : "100vh") : 400,
+        ...safeInsets,
       }}
     >
       {/* Fullscreen expand button */}
@@ -305,7 +352,8 @@ export default function SpendingInsights() {
 
       {/* Content */}
       <div
-        className={`w-full h-full overflow-y-auto ${isFullscreen ? "p-8" : "p-5"}`}
+        className="w-full h-full overflow-y-auto"
+        style={{ padding: isFullscreen ? containerPadding : 20 }}
       >
         {/* Header */}
         <div className="mb-6">
@@ -337,21 +385,73 @@ export default function SpendingInsights() {
           </div>
 
           {/* Categories List */}
-          <div className={cn("space-y-2 min-w-0", !isFullscreen && "flex-1")}>
+          <motion.div
+            variants={staggerContainer}
+            initial="initial"
+            animate="animate"
+            className={cn("space-y-2 min-w-0", !isFullscreen && "flex-1")}
+          >
             {(isFullscreen ? categoriesWithMetadata : categoriesWithMetadata.slice(0, 4)).map((category, index) => (
-              <CategoryBar
-                key={category.category}
-                category={category}
-                index={index}
-                onClick={() =>
-                  setUiState(s => s ? { ...s, selectedIndex: s.selectedIndex === index ? null : index } : null)
-                }
-                isSelected={uiState?.selectedIndex === index}
-              />
+              <motion.div key={category.category} variants={listItem}>
+                <CategoryBar
+                  category={category}
+                  index={index}
+                  onClick={() =>
+                    setUiState(s => s ? { ...s, selectedIndex: s.selectedIndex === index ? null : index } : null)
+                  }
+                  isSelected={uiState?.selectedIndex === index}
+                />
+                {/* Show "View Transactions" button when category is selected */}
+                {isFullscreen && uiState?.selectedIndex === index && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mt-2 ml-9"
+                  >
+                    <Button
+                      variant="outline"
+                      color="secondary"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        showCategoryTransactions(category.category);
+                      }}
+                      className="gap-2"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      View Transactions
+                    </Button>
+                  </motion.div>
+                )}
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
+
+        {/* Follow-up Actions */}
+        {isFullscreen && (
+          <motion.div
+            variants={fadeSlideUp}
+            initial="initial"
+            animate="animate"
+            className="mt-6 flex flex-wrap gap-3"
+          >
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.createBudget}
+              label="Create Budget"
+            />
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.compareMonths}
+              label="Compare to Last Month"
+            />
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.findSavings}
+              label="Find Savings"
+            />
+          </motion.div>
+        )}
       </div>
-    </div>
+    </motion.div>
   );
 }

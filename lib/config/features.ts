@@ -11,21 +11,19 @@
  */
 export const FEATURES = {
   /**
-   * Enable Stripe subscription management
-   * - When true: Requires STRIPE_* environment variables
-   * - When false: All tools are free tier, no subscription checks
-   */
-  SUBSCRIPTIONS: process.env.ENABLE_SUBSCRIPTIONS === "true",
-
-  /**
    * Enable passkey (WebAuthn) authentication
    * - When true: Users can set up passkeys for additional security
    * - When false: Passkey features are hidden
    */
   PASSKEYS: process.env.ENABLE_PASSKEYS !== "false", // Enabled by default
 
-  // TEMPLATE: Add your own feature flags here
-  // EXAMPLE_FEATURE: process.env.ENABLE_EXAMPLE === "true",
+  /**
+   * Enable paid subscription gates (Stripe integration)
+   * - When true: Users must have an active subscription to access features
+   * - When false: All authenticated users get free access with 2-account limit
+   * Set ENABLE_SUBSCRIPTIONS=true in .env to re-enable paid gates
+   */
+  SUBSCRIPTIONS: process.env.ENABLE_SUBSCRIPTIONS === "true", // Disabled by default
 } as const;
 
 /**

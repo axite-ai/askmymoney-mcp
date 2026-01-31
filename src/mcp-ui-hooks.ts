@@ -33,13 +33,13 @@ interface SafeAreaInsets {
   right: number;
 }
 
-interface SafeArea {
+export interface SafeArea {
   insets: SafeAreaInsets;
 }
 
 type DeviceType = 'mobile' | 'tablet' | 'desktop' | 'unknown';
 
-interface UserAgent {
+export interface UserAgent {
   device: { type: DeviceType };
   capabilities: {
     hover: boolean;
@@ -117,14 +117,16 @@ const SET_GLOBALS_EVENT_TYPE = 'openai:set_globals';
  */
 export function useOpenAiGlobal<K extends keyof OpenAiGlobals>(
   key: K
-): OpenAiGlobals[K] {
+): OpenAiGlobals[K] | undefined {
   return useSyncExternalStore(
     (onChange) => {
+      if (typeof window === 'undefined') return () => {};
       const handleSetGlobal = () => onChange();
       window.addEventListener(SET_GLOBALS_EVENT_TYPE, handleSetGlobal, { passive: true });
       return () => window.removeEventListener(SET_GLOBALS_EVENT_TYPE, handleSetGlobal);
     },
-    () => (window.openai as ExtendedAppsSdkBridge | undefined)?.[key as keyof ExtendedAppsSdkBridge] as OpenAiGlobals[K]
+    () => (window.openai as ExtendedAppsSdkBridge | undefined)?.[key as keyof ExtendedAppsSdkBridge] as OpenAiGlobals[K],
+    () => undefined
   );
 }
 
@@ -151,13 +153,13 @@ export function useToolInfo<TOutput = UnknownObject, TMeta = UnknownObject>() {
  *
  * Manages the widget's display mode (inline, fullscreen, or pip).
  *
- * @returns Tuple of [currentMode, requestModeChange]
+ * @returns Tuple of [currentMode, requestModeChange], defaults to 'inline' during SSR
  */
 export function useDisplayMode(): [
   DisplayMode,
   (mode: DisplayMode) => Promise<void>
 ] {
-  const displayMode = useOpenAiGlobal('displayMode');
+  const displayMode = useOpenAiGlobal('displayMode') ?? 'inline';
 
   const requestDisplayMode = useCallback(async (mode: DisplayMode) => {
     await window.openai?.requestDisplayMode({ mode });
@@ -185,7 +187,9 @@ export function useWidgetState<T extends UnknownObject>(
   });
 
   useEffect(() => {
-    _setWidgetState(widgetStateFromWindow);
+    if (widgetStateFromWindow != null) {
+      _setWidgetState(widgetStateFromWindow);
+    }
   }, [widgetStateFromWindow]);
 
   const setWidgetState = useCallback((state: T | ((prev: T | null) => T | null)) => {
@@ -204,10 +208,10 @@ export function useWidgetState<T extends UnknownObject>(
 /**
  * Hook: useTheme - Get current theme
  *
- * @returns The current theme ('light' or 'dark')
+ * @returns The current theme ('light' or 'dark'), defaults to 'light' during SSR
  */
 export function useTheme(): Theme {
-  return useOpenAiGlobal('theme');
+  return useOpenAiGlobal('theme') ?? 'light';
 }
 
 /**
@@ -240,18 +244,19 @@ export function useSendFollowUpMessage() {
 }
 
 /**
- * Hook: useCallTool - Type-safe tool calling via AppType
+ * Hook: useCallTool - Tool calling for inter-widget workflows
  *
- * Calls other MCP tools with full type safety based on the AppType definition.
+ * Calls other MCP tools. Can be used with AppType for type safety when calling
+ * known tools, or with any string for dynamic tool names.
  *
- * @returns Function to call tools with typed arguments and return values
+ * @returns Function to call tools with arguments
  */
 export function useCallTool() {
-  return useCallback(async <T extends keyof AppType>(
-    toolName: T,
-    args: AppType[T]['input']
-  ): Promise<AppType[T]['result']> => {
-    const response = await window.openai?.callTool(toolName as string, args);
-    return response as AppType[T]['result'];
+  return useCallback(async <TName extends string = string>(
+    toolName: TName,
+    args: Record<string, unknown> = {}
+  ): Promise<CallToolResponse | undefined> => {
+    const response = await window.openai?.callTool(toolName, args);
+    return response;
   }, []);
 }

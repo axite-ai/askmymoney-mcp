@@ -18,8 +18,10 @@ export function middleware(request: NextRequest) {
   // Check if origin is allowed
   const isAllowedOrigin = origin && (
     allowedOrigins.some(pattern => pattern.test(origin)) ||
-    origin.includes('localhost') ||
-    origin.includes('127.0.0.1')
+    (process.env.NODE_ENV === 'development' && (
+      /^https?:\/\/localhost(:\d+)?$/.test(origin) ||
+      /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)
+    ))
   );
 
   // Determine which origin to use in response
@@ -34,12 +36,12 @@ export function middleware(request: NextRequest) {
   // TEMPLATE: Add your third-party service domains (e.g., payment processors, analytics) to these directives
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.claude.ai https://chat.openai.com https://challenges.cloudflare.com https://*.cloudflare.com https://*.oaistatic.com",
+    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://*.claude.ai https://chat.openai.com https://challenges.cloudflare.com https://*.cloudflare.com https://*.oaistatic.com https://cdn.plaid.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.oaistatic.com",
     "font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com https://*.oaistatic.com",
-    "img-src 'self' data: https://*.oaistatic.com",
-    `frame-src 'self' https://*.claude.ai https://*.oaiusercontent.com https://chat.openai.com`,
-    "connect-src 'self' https://*.claude.ai https://chat.openai.com https://*.cloudflare.com",
+    "img-src 'self' data: https://*.oaistatic.com https://*.plaid.com",
+    `frame-src 'self' https://*.claude.ai https://*.oaiusercontent.com https://chat.openai.com https://*.plaid.com`,
+    "connect-src 'self' https://*.claude.ai https://chat.openai.com https://*.cloudflare.com https://*.plaid.com",
     `base-uri 'self'`,
     "form-action 'self'",
     "frame-ancestors 'self' https://*.claude.ai https://*.oaiusercontent.com https://chat.openai.com",
@@ -102,6 +104,9 @@ export function middleware(request: NextRequest) {
 
   // Set CSP header
   response.headers.set("Content-Security-Policy", csp.replace(/\s{2,}/g, ' ').trim());
+
+  // Prevent token leakage via Referer header to third-party domains (Plaid, Stripe, etc.)
+  response.headers.set("Referrer-Policy", "no-referrer");
 
   // Set CORS headers for all requests
   response.headers.set("Access-Control-Allow-Origin", allowOrigin);

@@ -5,9 +5,10 @@
  * These responses include the login widget to allow users to authenticate inline.
  */
 
-import type { AuthChallengeResponse } from "../types/tool-responses";
-import { createTextContent, createMCPResponse } from "../types/mcp-responses";
+import type { OpenAIResponseMetadata } from "../types";
 import { baseURL } from "@/baseUrl";
+import { logger } from "@/lib/services/logger-service";
+import { createAuthNonce } from "./auth-nonce";
 
 /**
  * Create a response that prompts the user to authenticate
@@ -18,27 +19,33 @@ import { baseURL } from "@/baseUrl";
  * @param featureName - Optional name of the feature requiring authentication
  * @returns MCP tool response with login widget reference
  */
-export function createLoginPromptResponse(featureName?: string): AuthChallengeResponse {
+export function createLoginPromptResponse(featureName?: string) {
   const baseMessage = featureName
-    ? `To access ${featureName}, please sign in to your account.`
-    : "This feature requires authentication. Please sign in to your account.";
+    ? `To access ${featureName}, please sign in to your AskMyMoney account.`
+    : "This feature requires authentication. Please sign in to your AskMyMoney account.";
 
-  return createMCPResponse(
-    [createTextContent(baseMessage)],
-    {
-      structuredContent: {
-        message: baseMessage,
-      },
-      _meta: {
-        "openai/toolInvocation/invoking": "Checking authentication",
-        "openai/toolInvocation/invoked": "Authentication required",
-        "openai/outputTemplate": "ui://widget/login.html",
-        "openai/widgetAccessible": false,
-        "openai/resultCanProduceWidget": true,
-      },
-      isError: false,
-    }
-  );
+  const responseMeta: OpenAIResponseMetadata = {
+    "openai/toolInvocation/invoking": "Checking authentication",
+    "openai/toolInvocation/invoked": "Authentication required",
+    "openai/outputTemplate": "ui://widget/login.html",
+    "openai/widgetAccessible": false, // Login widget should not call tools
+    "openai/resultCanProduceWidget": true, // This response produces a widget
+  };
+
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: baseMessage,
+      } as { [x: string]: unknown; type: "text"; text: string },
+    ],
+    // Include minimal structured content to satisfy outputSchema validation
+    structuredContent: {
+      message: baseMessage,
+    },
+    isError: false, // Not an error - just requires auth
+    _meta: responseMeta,
+  };
 }
 
 /**
@@ -48,31 +55,88 @@ export function createLoginPromptResponse(featureName?: string): AuthChallengeRe
  * @param userId - User ID from the authenticated MCP session
  * @returns MCP tool response with subscription-required widget reference
  */
-export function createSubscriptionRequiredResponse(featureName?: string, userId?: string): AuthChallengeResponse {
+export function createSubscriptionRequiredResponse(featureName?: string, userId?: string) {
   const baseMessage = featureName
     ? `To access ${featureName}, please subscribe to a plan.`
     : "This feature requires a subscription. Please choose a plan.";
 
-  return createMCPResponse(
-    [createTextContent(baseMessage)],
-    {
-      structuredContent: {
-        message: baseMessage,
-        featureName: featureName || "this feature",
-        error_message: "Subscription required",
-        pricingUrl: `${baseURL}/pricing`,
-      },
-      _meta: {
-        "openai/toolInvocation/invoking": "Checking subscription",
-        "openai/toolInvocation/invoked": "Subscription required",
-        "openai/outputTemplate": "ui://widget/subscription-required.html",
-        "openai/widgetAccessible": false,
-        "openai/resultCanProduceWidget": true,
-        userId,
-      },
-      isError: false,
-    }
-  );
+  const responseMeta: OpenAIResponseMetadata = {
+    "openai/toolInvocation/invoking": "Checking subscription",
+    "openai/toolInvocation/invoked": "Subscription required",
+    "openai/outputTemplate": "ui://widget/subscription-required.html",
+    "openai/widgetAccessible": false,
+    "openai/resultCanProduceWidget": true,
+  };
+
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: baseMessage,
+      } as { [x: string]: unknown; type: "text"; text: string },
+    ],
+    // Include structured content so widget can access feature name, pricing URL, and userId
+    structuredContent: {
+      featureName: featureName || "this feature",
+      error_message: "Subscription required",
+      pricingUrl: `${baseURL}/pricing`,
+    },
+    isError: false,
+    _meta: {
+      ...responseMeta,
+      userId, // Pass userId so widget can use it in server action
+    },
+  };
+}
+
+/**
+ * Create a response prompting the user to connect their bank via Plaid Link
+ *
+ * Extracts the MCP access token from headers and passes it to the widget
+ * so it can be used when opening the /connect-bank popup
+ *
+ * @param userId - The user ID from the MCP session
+ * @param headers - The headers from the MCP request (contains Authorization Bearer token)
+ * @returns MCP tool response with Plaid connection widget
+ */
+export async function createPlaidRequiredResponse(userId: string, _headers: Headers) {
+  console.log('[Plaid Required Response] Creating response for user:', userId);
+
+  // Generate a short-lived auth nonce instead of exposing the raw Bearer token
+  const authNonce = createAuthNonce(userId);
+
+  console.log('[Plaid Required Response] Auth nonce generated');
+
+  const baseMessage = "Please connect your financial accounts to access your data.";
+
+  const responseMeta: OpenAIResponseMetadata = {
+    "openai/toolInvocation/invoking": "Checking bank connection",
+    "openai/toolInvocation/invoked": "Bank connection required",
+    "openai/outputTemplate": "ui://widget/plaid-required.html",
+    "openai/widgetAccessible": false,
+    "openai/resultCanProduceWidget": true,
+  };
+
+  const response = {
+    content: [
+      {
+        type: "text" as const,
+        text: baseMessage,
+      } as { [x: string]: unknown; type: "text"; text: string },
+    ],
+    structuredContent: {
+      baseUrl: baseURL,
+      message: "Bank connection required",
+    },
+    isError: false,
+    _meta: {
+      ...responseMeta,
+      userId,
+      authNonce, // Short-lived HMAC-signed nonce for authenticating popup
+    },
+  };
+
+  return response;
 }
 
 /**
@@ -82,33 +146,49 @@ export function createSubscriptionRequiredResponse(featureName?: string, userId?
  *
  * @param featureName - Optional name of the feature requiring security
  * @param userId - User ID from the authenticated session
+ * @param headers - Request headers containing the MCP Bearer token
  * @returns MCP tool response indicating security setup is required
  */
-export function createSecurityRequiredResponse(featureName?: string, userId?: string): AuthChallengeResponse {
+export function createSecurityRequiredResponse(featureName?: string, userId?: string, _headers?: Headers) {
   console.log('[Security Required Response] Creating response for user:', userId);
+
+  // Generate a short-lived auth nonce instead of exposing the raw Bearer token
+  const authNonce = userId ? createAuthNonce(userId) : undefined;
+
+  console.log('[Security Required Response] Auth nonce:', authNonce ? 'generated' : 'skipped (no userId)');
 
   const baseMessage = featureName
     ? `To access ${featureName}, you must first enable a passkey.`
     : "This feature requires additional security. Please set up a passkey to continue.";
 
-  return createMCPResponse(
-    [createTextContent(baseMessage)],
-    {
-      structuredContent: {
-        message: "Security setup required",
-        baseUrl: baseURL,
-        featureName: featureName || "this feature",
-        setupUrl: `${baseURL}/onboarding`,
-      },
-      _meta: {
-        "openai/toolInvocation/invoking": "Checking security status",
-        "openai/toolInvocation/invoked": "Security setup required",
-        "openai/outputTemplate": "ui://widget/security-required.html",
-        "openai/widgetAccessible": false,
-        "openai/resultCanProduceWidget": true,
-        userId,
-      },
-      isError: false,
-    }
-  );
+  const responseMeta: OpenAIResponseMetadata = {
+    "openai/toolInvocation/invoking": "Checking security status",
+    "openai/toolInvocation/invoked": "Security setup required",
+    "openai/outputTemplate": "ui://widget/security-required.html",
+    "openai/widgetAccessible": false,
+    "openai/resultCanProduceWidget": true,
+  };
+
+  const response = {
+    content: [
+      {
+        type: "text" as const,
+        text: baseMessage,
+      } as { [x: string]: unknown; type: "text"; text: string },
+    ],
+    structuredContent: {
+      message: "Security setup required",
+      baseUrl: baseURL,
+      featureName: featureName || "this feature",
+      setupUrl: `${baseURL}/onboarding`,
+    },
+    isError: false,
+    _meta: {
+      ...responseMeta,
+      userId,
+      authNonce, // Short-lived HMAC-signed nonce for authenticating popup
+    },
+  };
+
+  return response;
 }

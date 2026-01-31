@@ -1,10 +1,12 @@
 "use client";
 
+import { useState, useMemo, useEffect } from "react";
+import { motion } from "framer-motion";
 import { useToolInfo, useDisplayMode, useOpenAiGlobal } from "@/src/mcp-ui-hooks";
 import type { BusinessCashFlowContent } from "@/lib/types/tool-responses";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
 import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
-import { useState } from "react";
+import { FollowUpButton, FOLLOW_UP_PROMPTS } from "@/src/components/shared/follow-up-button";
 import { EmptyMessage } from "@openai/apps-sdk-ui/components/EmptyMessage";
 import { Button } from "@openai/apps-sdk-ui/components/Button";
 import { Badge } from "@openai/apps-sdk-ui/components/Badge";
@@ -12,6 +14,8 @@ import { AnimateLayout } from "@openai/apps-sdk-ui/components/Transition";
 import { Expand } from "@openai/apps-sdk-ui/components/Icon";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/src/utils/format";
+import { fadeSlideUp } from "@/src/lib/animation-variants";
+import type { SafeArea, UserAgent } from "@/src/mcp-ui-hooks";
 
 interface CashFlowProjection {
   month: number;
@@ -30,8 +34,31 @@ export default function BusinessCashFlowWidget() {
   const [showDetails, setShowDetails] = useState(false);
 
   const [displayMode, requestDisplayMode] = useDisplayMode();
-  const maxHeight = useOpenAiGlobal("maxHeight") as number | string | undefined;
+  const maxHeight = useOpenAiGlobal("maxHeight") as number | undefined;
+  const safeArea = useOpenAiGlobal("safeArea") as SafeArea | undefined;
+  const userAgent = useOpenAiGlobal("userAgent") as UserAgent | undefined;
+
   const isFullscreen = displayMode === "fullscreen";
+  const isInline = displayMode === "inline";
+  const isMobile = userAgent?.device?.type === "mobile" || (typeof maxHeight === "number" && maxHeight < 720);
+
+  const safeInsets = useMemo(() => ({
+    paddingTop: safeArea?.insets?.top ?? 0,
+    paddingBottom: safeArea?.insets?.bottom ?? 0,
+    paddingLeft: safeArea?.insets?.left ?? 0,
+    paddingRight: safeArea?.insets?.right ?? 0,
+  }), [safeArea]);
+
+  const containerPadding = isInline ? 12 : isMobile ? 20 : 32;
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") requestDisplayMode("inline");
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen, requestDisplayMode]);
 
   // Extract data from toolInfo
   // Note: toolInfo.output IS the structuredContent directly in Skybridge
@@ -66,14 +93,18 @@ export default function BusinessCashFlowWidget() {
   const runwayMonths = runway.months === Infinity ? "∞" : runway.months.toFixed(1);
 
   return (
-    <div
+    <motion.div
+      variants={fadeSlideUp}
+      initial="initial"
+      animate="animate"
       className={cn(
         "antialiased w-full relative bg-transparent text-default flex flex-col",
         !isFullscreen && "overflow-hidden min-h-[400px]"
       )}
       style={{
-        maxHeight: maxHeight ?? undefined,
-        height: isFullscreen ? maxHeight ?? undefined : undefined,
+        maxHeight: typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : undefined,
+        height: isFullscreen ? (typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : "100vh") : 400,
+        ...safeInsets,
       }}
     >
       {/* Fullscreen expand button */}
@@ -91,7 +122,10 @@ export default function BusinessCashFlowWidget() {
       )}
 
       {/* Content */}
-      <div className={cn("w-full h-full overflow-y-auto flex flex-col", isFullscreen ? "p-8 justify-start" : "p-6 justify-center")}>
+      <div
+        className={cn("w-full h-full overflow-y-auto flex flex-col", isFullscreen ? "justify-start" : "justify-center")}
+        style={{ padding: isFullscreen ? containerPadding : 24 }}
+      >
         {/* Header */}
         <div className={cn("mb-6", !isFullscreen && "text-center")}>
           <h1 className="heading-lg mb-2">Business Cash Flow</h1>
@@ -163,7 +197,26 @@ export default function BusinessCashFlowWidget() {
             </div>
           </AnimateLayout>
         )}
+
+        {/* Follow-up Actions */}
+        {isFullscreen && (
+          <motion.div
+            variants={fadeSlideUp}
+            initial="initial"
+            animate="animate"
+            className="mt-6 flex flex-wrap gap-3"
+          >
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.projectRunway(20)}
+              label="Project Runway"
+            />
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.optimizeCashFlow}
+              label="Optimize Cash Flow"
+            />
+          </motion.div>
+        )}
       </div>
-    </div>
+    </motion.div>
   );
 }

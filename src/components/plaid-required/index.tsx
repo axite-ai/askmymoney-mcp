@@ -21,7 +21,7 @@ interface PlaidRequiredContent {
 
 interface PlaidRequiredMetadata {
   userId?: string;
-  mcpToken?: string;
+  authNonce?: string;
 }
 
 interface PlaidRequiredUIState extends Record<string, unknown> {
@@ -53,14 +53,14 @@ export default function PlaidRequired() {
     ? (toolInfo.responseMetadata as PlaidRequiredMetadata)
     : undefined;
 
-  const mcpToken = toolMetadata?.mcpToken;
+  const authNonce = toolMetadata?.authNonce;
 
   const handleConnect = () => {
     const baseUrl = toolOutput?.baseUrl || window.location.origin;
-    console.log("[PlaidRequired Widget] Opening /connect-bank with MCP token");
+    console.log("[PlaidRequired Widget] Opening /connect-bank with auth nonce");
 
-    if (!mcpToken) {
-      console.error("[PlaidRequired Widget] No MCP token in props");
+    if (!authNonce) {
+      console.error("[PlaidRequired Widget] No auth nonce in props");
       setUiState({
         successMessage: null,
         errorMessage: "Authentication token not available. Please try again.",
@@ -68,8 +68,8 @@ export default function PlaidRequired() {
       return;
     }
 
-    const connectUrl = `${baseUrl}/connect-bank?token=${encodeURIComponent(
-      mcpToken
+    const connectUrl = `${baseUrl}/connect-bank?nonce=${encodeURIComponent(
+      authNonce
     )}`;
 
     // Use openExternal from Skybridge SDK - this properly opens links from within

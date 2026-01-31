@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { WebhookService } from '@/lib/services/webhook-service';
 import { exchangePublicToken, plaidClient } from '@/lib/services/plaid-service';
 import { UserService } from '@/lib/services/user-service';
+import { EncryptionService } from '@/lib/services/encryption-service';
 import { logger } from '@/lib/services/logger-service';
 
 /**
@@ -159,11 +160,11 @@ async function handleItemAddResult(
     const { getMaxAccountsForPlan } = await import('@/lib/utils/plan-limits');
     const { getEffectivePlan } = await import('@/lib/utils/subscription-helpers');
 
-    // Get user's effective plan (handles FEATURES.SUBSCRIPTIONS bypass)
+    // Get user's subscription plan
     const plan = await getEffectivePlan(session.userId);
     const maxAccounts = getMaxAccountsForPlan(plan);
 
-    // If subscriptions enabled but no plan found, skip processing
+    // If no plan found, skip processing
     if (!plan || maxAccounts === null) {
       console.warn('[Link Webhook] No active subscription, skipping item add', {
         userId: session.userId,
@@ -218,7 +219,7 @@ async function handleItemAddResult(
           errorMessage: null,
           consentExpiresAt: null, // Reset consent expiration
           newAccountsAvailable: null, // Clear new accounts prompt
-          accessToken: accessToken, // Update access token (encrypted by savePlaidItem)
+          accessToken: EncryptionService.encrypt(accessToken),
           institutionId: institutionId || existingItem.institutionId,
           institutionName: institutionName || existingItem.institutionName,
           lastWebhookAt: new Date(),
@@ -300,11 +301,11 @@ async function handleSessionFinished(
         const { getMaxAccountsForPlan } = await import('@/lib/utils/plan-limits');
         const { getEffectivePlan } = await import('@/lib/utils/subscription-helpers');
 
-        // Get user's effective plan (handles FEATURES.SUBSCRIPTIONS bypass)
+        // Get user's subscription plan
         const plan = await getEffectivePlan(session.userId);
         const maxAccounts = getMaxAccountsForPlan(plan);
 
-        // If subscriptions enabled but no plan found, stop processing
+        // If no plan found, stop processing
         if (!plan || maxAccounts === null) {
           console.warn('[Link Webhook] No active subscription in SESSION_FINISHED, skipping remaining tokens', {
             userId: session.userId,

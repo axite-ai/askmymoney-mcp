@@ -41,6 +41,7 @@ interface ConnectItemContent {
     max: number;
     maxFormatted: string;
     planName: string;
+    subscriptionsEnabled?: boolean;
   };
   canConnect?: boolean;
   // Auth error fields (checked by checkWidgetAuth)
@@ -53,8 +54,7 @@ interface ConnectItemContent {
 interface ConnectItemMetadata {
   items: ConnectedItem[];
   baseUrl?: string;
-  mcpToken?: string;
-  subscriptionsEnabled?: boolean;
+  authNonce?: string;
 }
 
 const features = [
@@ -63,6 +63,20 @@ const features = [
   { icon: Flash, text: "Real-time balance updates" },
   { icon: Trending, text: "AI-powered spending insights" },
 ];
+
+type ActionType = 'error' | 'expiring' | 'new_accounts';
+
+const ACTION_TYPE_COLORS: Record<ActionType, 'danger' | 'warning' | 'info'> = {
+  error: 'danger',
+  new_accounts: 'info',
+  expiring: 'warning',
+};
+
+const ACTION_TYPE_TEXT_COLORS: Record<ActionType, string> = {
+  error: 'text-danger',
+  new_accounts: 'text-info',
+  expiring: 'text-warning',
+};
 
 export default function ConnectItem() {
   const toolInfo = useToolInfo();
@@ -86,29 +100,48 @@ export default function ConnectItem() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Open connect page for both connecting and managing accounts
-  const handleOpenConnectPage = (itemId?: string) => {
-    const mcpToken = toolMetadata?.mcpToken;
+  const handleOpenConnectPage = (itemId?: string, mode?: string) => {
+    const authNonce = toolMetadata?.authNonce;
     const baseUrl = toolMetadata?.baseUrl || window.location.origin;
 
     console.log("[ConnectItem Widget] Opening /connect-bank", {
-      mcpToken: !!mcpToken,
+      hasNonce: !!authNonce,
       itemId,
+      mode,
     });
 
-    if (!mcpToken) {
-      console.error("[ConnectItem Widget] No MCP token in props");
+    if (!authNonce) {
+      console.error("[ConnectItem Widget] No auth nonce in props");
       setErrorMessage("Authentication token not available. Please try again.");
       return;
     }
 
-    let connectUrl = `${baseUrl}/connect-bank?token=${encodeURIComponent(mcpToken)}`;
+    let connectUrl = `${baseUrl}/connect-bank?nonce=${encodeURIComponent(authNonce)}`;
 
     // If itemId provided, add it for update mode
     if (itemId) {
       connectUrl += `&itemId=${encodeURIComponent(itemId)}`;
     }
 
+    // If mode provided (e.g., 'new_accounts'), pass it through
+    if (mode) {
+      connectUrl += `&mode=${encodeURIComponent(mode)}`;
+    }
+
     openExternal(connectUrl);
+  };
+
+  // Optimistically dismiss new accounts prompt in widget
+  const handleDismissNewAccounts = (itemId: string) => {
+    if (!status) return;
+    setStatus({
+      ...status,
+      items: status.items.map((item) =>
+        item.id === itemId
+          ? { ...item, newAccountsAvailable: null }
+          : item
+      ),
+    });
   };
 
   // Load status from props (MCP tool response only)
@@ -129,7 +162,10 @@ export default function ConnectItem() {
       // Status provided in props (tool was called successfully)
       setStatus({
         items: items,
-        planLimits: planLimits,
+        planLimits: {
+          ...planLimits,
+          subscriptionsEnabled: planLimits.subscriptionsEnabled ?? true,
+        },
         deletionStatus: { canDelete: true },
         canConnect: toolOutput?.canConnect ?? true,
       });
@@ -153,29 +189,26 @@ export default function ConnectItem() {
 
   // Determine if item needs attention and what action to show
   const getItemActionRequired = (item: ConnectedItem): {
-    type: 'error' | 'expiring' | 'new_accounts' | null;
+    type: ActionType;
     message: string;
     actionLabel: string;
   } | null => {
-    // Priority 1: Error state (login required)
     if (item.status === 'error') {
       return {
         type: 'error',
-        message: item.errorMessage || 'Authentication required',
+        message: 'Your bank requires you to sign in again to restore access.',
         actionLabel: 'Re-authenticate',
       };
     }
 
-    // Priority 2: New accounts available
     if (item.newAccountsAvailable && !item.newAccountsAvailable.dismissed) {
       return {
         type: 'new_accounts',
-        message: 'New accounts detected at this institution',
+        message: 'New accounts available. Add them to track all your finances.',
         actionLabel: 'Add Accounts',
       };
     }
 
-    // Priority 3: Consent expiring soon (within 7 days)
     if (item.consentExpiresAt) {
       const daysUntilExpiration = Math.ceil(
         (new Date(item.consentExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
@@ -184,7 +217,7 @@ export default function ConnectItem() {
       if (daysUntilExpiration <= 7 && daysUntilExpiration > 0) {
         return {
           type: 'expiring',
-          message: `Access expires in ${daysUntilExpiration} ${daysUntilExpiration === 1 ? 'day' : 'days'}`,
+          message: `Access expires in ${daysUntilExpiration} ${daysUntilExpiration === 1 ? 'day' : 'days'}. Renew to keep your data up to date.`,
           actionLabel: 'Renew Access',
         };
       }
@@ -197,14 +230,13 @@ export default function ConnectItem() {
     const action = getItemActionRequired(item);
 
     if (action) {
-      if (action.type === 'error') {
-        return <Badge color="danger">Action Required</Badge>;
-      }
-      if (action.type === 'new_accounts') {
-        return <Badge color="info">New Accounts</Badge>;
-      }
-      if (action.type === 'expiring') {
-        return <Badge color="warning">Expiring Soon</Badge>;
+      switch (action.type) {
+        case 'error':
+          return <Badge color="danger">Action Required</Badge>;
+        case 'new_accounts':
+          return <Badge color="info">New Accounts</Badge>;
+        case 'expiring':
+          return <Badge color="warning">Expiring Soon</Badge>;
       }
     }
 
@@ -353,12 +385,7 @@ export default function ConnectItem() {
 
                           {/* Show action-specific message */}
                           {actionRequired && (
-                            <p className={cn(
-                              "text-xs mt-1",
-                              actionRequired.type === 'error' ? "text-danger" :
-                              actionRequired.type === 'new_accounts' ? "text-info" :
-                              "text-warning"
-                            )}>
+                            <p className={cn("text-xs mt-1", ACTION_TYPE_TEXT_COLORS[actionRequired.type])}>
                               {actionRequired.message}
                             </p>
                           )}
@@ -371,14 +398,23 @@ export default function ConnectItem() {
                           <Button
                             variant="soft"
                             size="sm"
-                            color={
-                              actionRequired.type === 'error' ? 'danger' :
-                              actionRequired.type === 'new_accounts' ? 'info' :
-                              'warning'
-                            }
-                            onClick={() => handleOpenConnectPage(item.id)}
+                            color={ACTION_TYPE_COLORS[actionRequired.type]}
+                            onClick={() => handleOpenConnectPage(
+                              item.id,
+                              actionRequired.type === 'new_accounts' ? 'new_accounts' : undefined
+                            )}
                           >
                             {actionRequired.actionLabel}
+                          </Button>
+                        )}
+                        {actionRequired?.type === 'new_accounts' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            color="secondary"
+                            onClick={() => handleDismissNewAccounts(item.id)}
+                          >
+                            Dismiss
                           </Button>
                         )}
 
@@ -455,12 +491,12 @@ export default function ConnectItem() {
                   Account Limit Reached
                 </p>
                 <p className="text-sm text-secondary">
-                  {toolMetadata?.subscriptionsEnabled !== false
-                    ? "Remove an account or upgrade your plan to connect more."
-                    : "Remove an account to connect more."}
+                  {status?.planLimits?.subscriptionsEnabled === false
+                    ? `You've reached the maximum of ${status.planLimits.max} free accounts. Remove an existing connection to add a new one.`
+                    : "Remove an account or upgrade your plan to connect more."}
                 </p>
               </div>
-              {toolMetadata?.subscriptionsEnabled !== false && (
+              {status?.planLimits?.subscriptionsEnabled !== false && (
                 <ButtonLink
                   href="/pricing"
                   color="primary"

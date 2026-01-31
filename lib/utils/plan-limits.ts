@@ -18,7 +18,14 @@ export interface PlanLimits {
  * Subscription plan limits
  * IMPORTANT: This is the single source of truth for plan limits
  */
+export const FREE_PLAN_NAME = 'free' as const;
+
 export const PLAN_LIMITS = {
+  free: {
+    maxAccounts: 2,
+    name: 'free',
+    displayName: 'Free',
+  },
   basic: {
     maxAccounts: 3,
     name: 'basic',

@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useEffect } from "react";
+import { motion } from "framer-motion";
 import {
   Expand,
   Trending,
@@ -15,6 +16,9 @@ import { useToolInfo, useWidgetState, useDisplayMode, useOpenAiGlobal } from "@/
 import { formatCurrency, formatPercent } from "@/src/utils/format";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
 import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
+import { FollowUpButton, FOLLOW_UP_PROMPTS } from "@/src/components/shared/follow-up-button";
+import { fadeSlideUp, staggerContainer, listItem } from "@/src/lib/animation-variants";
+import type { SafeArea, UserAgent } from "@/src/mcp-ui-hooks";
 
 interface Account {
   account_id: string;
@@ -86,8 +90,31 @@ export default function Investments() {
   });
 
   const [displayMode, requestDisplayMode] = useDisplayMode();
-  const maxHeight = useOpenAiGlobal("maxHeight") as number | string | undefined;
+  const maxHeight = useOpenAiGlobal("maxHeight") as number | undefined;
+  const safeArea = useOpenAiGlobal("safeArea") as SafeArea | undefined;
+  const userAgent = useOpenAiGlobal("userAgent") as UserAgent | undefined;
+
   const isFullscreen = displayMode === "fullscreen";
+  const isInline = displayMode === "inline";
+  const isMobile = userAgent?.device?.type === "mobile" || (typeof maxHeight === "number" && maxHeight < 720);
+
+  const safeInsets = useMemo(() => ({
+    paddingTop: safeArea?.insets?.top ?? 0,
+    paddingBottom: safeArea?.insets?.bottom ?? 0,
+    paddingLeft: safeArea?.insets?.left ?? 0,
+    paddingRight: safeArea?.insets?.right ?? 0,
+  }), [safeArea]);
+
+  const containerPadding = isInline ? 12 : isMobile ? 20 : 32;
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") requestDisplayMode("inline");
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen, requestDisplayMode]);
 
   // Extract data from toolInfo
   // Note: toolInfo.output IS the structuredContent directly in Skybridge
@@ -164,14 +191,18 @@ export default function Investments() {
   );
 
   return (
-    <div
+    <motion.div
+      variants={fadeSlideUp}
+      initial="initial"
+      animate="animate"
       className={cn(
         "antialiased w-full relative bg-transparent text-default",
         !isFullscreen && "overflow-hidden"
       )}
       style={{
-        maxHeight: maxHeight ?? undefined,
-        height: isFullscreen ? maxHeight ?? undefined : 400,
+        maxHeight: typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : undefined,
+        height: isFullscreen ? (typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : "100vh") : 400,
+        ...safeInsets,
       }}
     >
       {/* Expand button (inline mode only) */}
@@ -189,7 +220,10 @@ export default function Investments() {
       )}
 
       {/* Content */}
-      <div className={cn("w-full h-full overflow-y-auto", isFullscreen ? "p-8" : "p-0")}>
+      <div
+        className="w-full h-full overflow-y-auto"
+        style={{ padding: isFullscreen ? containerPadding : 0 }}
+      >
         {/* Header */}
         <div className="mb-6">
           <h1 className="heading-lg mb-2">
@@ -343,7 +377,26 @@ export default function Investments() {
             Click expand to view detailed holdings and accounts
           </div>
         )}
+
+        {/* Follow-up Actions */}
+        {isFullscreen && (
+          <motion.div
+            variants={fadeSlideUp}
+            initial="initial"
+            animate="animate"
+            className="mt-6 flex flex-wrap gap-3"
+          >
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.analyzeDiversification}
+              label="Analyze Diversification"
+            />
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.investmentRecommendations}
+              label="Get Recommendations"
+            />
+          </motion.div>
+        )}
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -106,10 +106,11 @@ export const createLinkToken = async (
   options?: {
     redirectUri?: string;
     accessToken?: string;
+    accountSelectionEnabled?: boolean;
   }
 ) => {
   try {
-    const { redirectUri, accessToken } = options || {};
+    const { redirectUri, accessToken, accountSelectionEnabled } = options || {};
 
     // For update mode, we don't need a user token
     const request: LinkTokenCreateRequest = {
@@ -125,9 +126,16 @@ export const createLinkToken = async (
 
     // Update mode: re-authenticate existing item
     if (accessToken) {
-      console.log('[Plaid] Creating link token for update mode (re-authentication)');
+      console.log('[Plaid] Creating link token for update mode (re-authentication)', {
+        accountSelectionEnabled,
+      });
       request.access_token = accessToken;
       // Do NOT include products array for update mode
+
+      // Enable account selection for adding new accounts
+      if (accountSelectionEnabled) {
+        request.update = { account_selection_enabled: true };
+      }
     } else {
       // Regular mode: connect new items
       console.log('[Plaid] Creating link token with Multi-Item Link enabled');

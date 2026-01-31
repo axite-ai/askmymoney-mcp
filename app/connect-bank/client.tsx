@@ -7,7 +7,8 @@ import {
   createPlaidLinkToken,
   checkPlanLimit,
   getConnectedItems,
-  removeItem
+  removeItem,
+  dismissNewAccounts
 } from './actions';
 import { useTheme } from '@/src/mcp-ui-hooks';
 import { cn } from '@/lib/utils/cn';
@@ -40,6 +41,8 @@ interface ConnectedItem {
   status: string | null;
   errorCode: string | null;
   errorMessage: string | null;
+  consentExpiresAt?: string | null;
+  newAccountsAvailable?: { detectedAt: string; dismissed?: boolean } | null;
   createdAt?: string;
   accountCount?: number;
 }
@@ -51,10 +54,42 @@ const features = [
   { icon: Trending, text: "AI-powered spending insights" },
 ];
 
+type ActionType = 'error' | 'expiring' | 'new_accounts';
+
+const ACTION_TYPE_COLORS: Record<ActionType, 'danger' | 'warning' | 'info'> = {
+  error: 'danger',
+  new_accounts: 'info',
+  expiring: 'warning',
+};
+
+const ACTION_TYPE_TEXT_COLORS: Record<ActionType, string> = {
+  error: 'text-danger',
+  new_accounts: 'text-info',
+  expiring: 'text-warning',
+};
+
+function formatAccountSummary(accountCount: number | undefined, createdAt: string | undefined): string {
+  const countPart = accountCount !== undefined && accountCount > 0
+    ? `${accountCount} ${accountCount === 1 ? 'account' : 'accounts'} \u2022 `
+    : '';
+  const datePart = `Connected ${createdAt ? new Date(createdAt).toLocaleDateString() : 'recently'}`;
+  return `${countPart}${datePart}`;
+}
+
 export default function ConnectBankClient() {
   const searchParams = useSearchParams();
   const theme = useTheme();
   const isDark = theme === 'dark';
+
+  // Update mode detection
+  const itemIdParam = searchParams.get('itemId');
+  const modeParam = searchParams.get('mode') as ActionType | null;
+  const isUpdateMode = !!itemIdParam;
+
+  const pageBackground = cn(
+    "min-h-screen flex items-center justify-center p-4",
+    isDark ? "bg-linear-to-br from-gray-900 to-gray-800" : "bg-linear-to-br from-gray-50 to-gray-100"
+  );
 
   const [pageData, setPageData] = useState<PlaidLinkPageProps>({
     linkToken: null,
@@ -68,16 +103,24 @@ export default function ConnectBankClient() {
   const [planInfo, setPlanInfo] = useState<any>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [itemsLoaded, setItemsLoaded] = useState(false);
+  const [updateLinkError, setUpdateLinkError] = useState<string | null>(null);
   const limitCheckInterval = useRef<NodeJS.Timeout | null>(null);
   const connectedItemsRef = useRef(connectedItems.length);
 
-  const mcpToken = searchParams.get('token');
-  const itemIdParam = searchParams.get('itemId');
+  const authNonce = searchParams.get('nonce');
+
+  const stopPolling = () => {
+    if (limitCheckInterval.current) {
+      clearInterval(limitCheckInterval.current);
+      limitCheckInterval.current = null;
+    }
+  };
 
   // Load connected items
   const loadConnectedItems = async () => {
     try {
-      const result = await getConnectedItems(mcpToken || undefined);
+      const result = await getConnectedItems(authNonce || undefined);
       if (result.success) {
         setConnectedItems(result.items);
         setDeletionInfo(result.deletionInfo);
@@ -85,12 +128,14 @@ export default function ConnectBankClient() {
       }
     } catch (error) {
       console.error('[Connect Bank] Error loading items:', error);
+    } finally {
+      setItemsLoaded(true);
     }
   };
 
   useEffect(() => {
     loadConnectedItems();
-  }, [mcpToken]);
+  }, [authNonce]);
 
   // Keep ref in sync with connectedItems
   useEffect(() => {
@@ -100,14 +145,12 @@ export default function ConnectBankClient() {
   // Initialize link token (only when user clicks connect, not on page load)
   const initializeLinkToken = async () => {
     try {
-      console.log('[Connect Bank] Fetching Plaid link token...', {
-        updateMode: !!itemIdParam
-      });
+      console.log('[Connect Bank] Fetching Plaid link token...');
 
-      const targetItemId = itemIdParam || undefined;
       const linkTokenResult = await createPlaidLinkToken(
-        mcpToken || undefined,
-        targetItemId
+        authNonce || undefined,
+        itemIdParam || undefined,
+        modeParam || undefined
       );
 
       if (!linkTokenResult.success) {
@@ -122,16 +165,11 @@ export default function ConnectBankClient() {
         throw new Error(linkTokenResult.error);
       }
 
-      setPageData({
-        linkToken: linkTokenResult.linkToken,
-        error: null,
-        updateModeItemId: targetItemId || null,
-      });
+      setPageData({ linkToken: linkTokenResult.linkToken, error: null });
     } catch (error) {
       setPageData({
         linkToken: null,
-        error: error instanceof Error ? error.message : 'Failed to load',
-        updateModeItemId: null,
+        error: error instanceof Error ? error.message : 'Failed to load'
       });
     }
   };
@@ -139,58 +177,60 @@ export default function ConnectBankClient() {
   // Load link token on mount (but don't fail if at limit)
   useEffect(() => {
     initializeLinkToken();
-  }, [mcpToken]);
+  }, [authNonce]);
 
   const { open, ready, exit } = usePlaidLink({
     token: pageData.linkToken || '',
     onSuccess: async (public_token, metadata) => {
-      console.log('Plaid Link onSuccess:', {
-        isUpdateMode: !!pageData.updateModeItemId,
-        metadata
-      });
+      console.log('Plaid Link onSuccess (Multi-Item Link):', { metadata });
+      stopPolling();
 
-      // Show success message
       const institutionName = metadata?.institution?.name || 'Account';
 
-      if (pageData.updateModeItemId) {
-        // Update mode - item was re-authenticated or new accounts added
-        setIsSuccess(true);
-        setSuccessMessage(`${institutionName} has been updated successfully!`);
+      // Show success and reload items
+      setIsSuccess(true);
+      setUpdateLinkError(null);
 
-        // Reload items to show cleared error state
+      if (isUpdateMode) {
+        const modeMessages: Record<string, string> = {
+          error: `${institutionName} has been re-authenticated successfully.`,
+          expiring: `Your access to ${institutionName} has been renewed.`,
+          new_accounts: `New accounts from ${institutionName} have been added.`,
+        };
+        setSuccessMessage(modeMessages[modeParam || 'error'] || `${institutionName} has been updated.`);
+      } else {
+        setSuccessMessage(
+          pageData.updateModeItemId
+            ? `${institutionName} has been re-authenticated!`
+            : `${institutionName} has been connected!`
+        );
+      }
+
+      // Reload connected items after a short delay (only auto-dismiss for normal mode)
+      if (!isUpdateMode) {
         setTimeout(() => {
           loadConnectedItems();
           setIsSuccess(false);
           setSuccessMessage(null);
-          // Clear update mode state
-          setPageData(prev => ({ ...prev, updateModeItemId: null }));
         }, 2000);
       } else {
-        // Normal mode - new item connected
-        setIsSuccess(true);
-        setSuccessMessage(`${institutionName} has been connected!`);
-
-        setTimeout(() => {
-          loadConnectedItems();
-          setIsSuccess(false);
-          setSuccessMessage(null);
-        }, 2000);
+        loadConnectedItems();
       }
     },
     onExit: (err, metadata) => {
       console.log('Plaid Link exit:', err, metadata);
-
-      // Stop polling
-      if (limitCheckInterval.current) {
-        clearInterval(limitCheckInterval.current);
-        limitCheckInterval.current = null;
-      }
+      stopPolling();
 
       if (err != null) {
-        setPageData((prev) => ({
-          ...prev,
-          error: err.display_message || err.error_message || 'Connection failed',
-        }));
+        const errorMsg = err.display_message || err.error_message || 'Connection failed';
+        if (isUpdateMode) {
+          setUpdateLinkError(errorMsg);
+        } else {
+          setPageData((prev) => ({
+            ...prev,
+            error: errorMsg,
+          }));
+        }
       } else if (metadata?.status === 'requires_questions') {
         setIsSuccess(true);
         setTimeout(() => {
@@ -205,7 +245,7 @@ export default function ConnectBankClient() {
   useEffect(() => {
     const checkLimit = async () => {
       try {
-        const result = await checkPlanLimit(mcpToken || undefined);
+        const result = await checkPlanLimit(authNonce || undefined);
 
         if (result.success) {
           // Check for new items (Multi-Item Link updates)
@@ -218,15 +258,8 @@ export default function ConnectBankClient() {
           if (result.limitReached) {
             console.log('[Connect Bank] Plan limit reached, closing Link');
             setLimitReached(true);
-
-            if (exit) {
-              exit({ force: true });
-            }
-
-            if (limitCheckInterval.current) {
-              clearInterval(limitCheckInterval.current);
-              limitCheckInterval.current = null;
-            }
+            if (exit) exit({ force: true });
+            stopPolling();
           }
         } else {
           console.error('[Connect Bank] Plan limit check failed:', result.error);
@@ -241,13 +274,8 @@ export default function ConnectBankClient() {
     checkLimit();
     limitCheckInterval.current = setInterval(checkLimit, 2000);
 
-    return () => {
-      if (limitCheckInterval.current) {
-        clearInterval(limitCheckInterval.current);
-        limitCheckInterval.current = null;
-      }
-    };
-  }, [ready, exit, mcpToken]);
+    return stopPolling;
+  }, [ready, exit, authNonce]);
 
   const handleConnect = () => {
     if (ready) {
@@ -255,10 +283,10 @@ export default function ConnectBankClient() {
     }
   };
 
-  const handleUpdateItem = async (itemId: string) => {
+  const handleUpdateItem = async (itemId: string, mode?: string) => {
     try {
       // Create link token for update mode
-      const result = await createPlaidLinkToken(mcpToken || undefined, itemId);
+      const result = await createPlaidLinkToken(authNonce || undefined, itemId, mode);
 
       if (!result.success) {
         setPageData((prev) => ({ ...prev, error: result.error }));
@@ -293,7 +321,7 @@ export default function ConnectBankClient() {
     setPageData((prev) => ({ ...prev, error: null }));
 
     try {
-      const result = await removeItem(itemId, mcpToken || undefined);
+      const result = await removeItem(itemId, authNonce || undefined);
 
       if (result.success) {
         setSuccessMessage(`Successfully disconnected ${institutionName || 'account'}`);
@@ -311,8 +339,81 @@ export default function ConnectBankClient() {
     }
   };
 
-  const getStatusBadge = (status: string | null) => {
-    switch (status) {
+  const handleDismissNewAccounts = async (itemId: string) => {
+    try {
+      const result = await dismissNewAccounts(itemId, authNonce || undefined);
+      if (result.success) {
+        await loadConnectedItems();
+      } else {
+        setPageData((prev) => ({ ...prev, error: result.error }));
+      }
+    } catch (error) {
+      console.error('[Connect Bank] Error dismissing new accounts:', error);
+    }
+  };
+
+  const getItemActionRequired = (item: ConnectedItem): {
+    type: ActionType;
+    message: string;
+    actionLabel: string;
+  } | null => {
+    if (item.status === 'error') {
+      return {
+        type: 'error',
+        message: 'Your bank requires you to sign in again to restore access.',
+        actionLabel: 'Re-authenticate',
+      };
+    }
+    if (item.newAccountsAvailable && !item.newAccountsAvailable.dismissed) {
+      return {
+        type: 'new_accounts',
+        message: 'New accounts available. Add them to track all your finances.',
+        actionLabel: 'Add Accounts',
+      };
+    }
+    if (item.consentExpiresAt) {
+      const daysUntilExpiration = Math.ceil(
+        (new Date(item.consentExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      );
+      if (daysUntilExpiration <= 7 && daysUntilExpiration > 0) {
+        return {
+          type: 'expiring',
+          message: `Access expires in ${daysUntilExpiration} ${daysUntilExpiration === 1 ? 'day' : 'days'}. Renew to keep your data up to date.`,
+          actionLabel: 'Renew Access',
+        };
+      }
+    }
+    return null;
+  };
+
+  const getStatusBadge = (item: ConnectedItem) => {
+    const action = getItemActionRequired(item);
+    if (action) {
+      switch (action.type) {
+        case 'error':
+          return (
+            <Badge color="danger" size="sm">
+              <ErrorIcon className="w-3 h-3 mr-1" />
+              Action Required
+            </Badge>
+          );
+        case 'new_accounts':
+          return (
+            <Badge color="info" size="sm">
+              New Accounts
+            </Badge>
+          );
+        case 'expiring':
+          return (
+            <Badge color="warning" size="sm">
+              <Clock className="w-3 h-3 mr-1" />
+              Expiring Soon
+            </Badge>
+          );
+      }
+    }
+
+    switch (item.status) {
       case 'active':
         return (
           <Badge color="success" size="sm">
@@ -327,22 +428,261 @@ export default function ConnectBankClient() {
             Connecting...
           </Badge>
         );
-      case 'error':
-        return (
-          <Badge color="danger" size="sm">
-            <ErrorIcon className="w-3 h-3 mr-1" />
-            Action Required
-          </Badge>
-        );
       default:
         return null;
     }
   };
 
+  // === Update Mode: Focused single-column layout ===
+  if (isUpdateMode) {
+    const updateTargetItem = connectedItems.find(i => i.id === itemIdParam);
+    const targetAction = updateTargetItem ? getItemActionRequired(updateTargetItem) : null;
+    const effectiveMode = modeParam || targetAction?.type || 'error';
+
+    const modeConfig = {
+      error: {
+        title: 'Fix Your Bank Connection',
+        Icon: ErrorIcon,
+        badgeText: 'Action Required',
+        badgeColor: 'danger' as const,
+        buttonText: 'Fix Connection',
+        buttonColor: 'danger' as const,
+        iconColor: 'text-danger',
+        bgColor: 'bg-danger-soft',
+        getExplanation: (name: string) =>
+          `Your ${name} connection has stopped working. Your bank requires you to sign in again to restore access.`,
+      },
+      expiring: {
+        title: 'Renew Your Bank Connection',
+        Icon: Clock,
+        badgeText: 'Expiring Soon',
+        badgeColor: 'warning' as const,
+        buttonText: 'Renew Access',
+        buttonColor: 'warning' as const,
+        iconColor: 'text-warning',
+        bgColor: 'bg-warning-soft',
+        getExplanation: (name: string) => {
+          if (updateTargetItem?.consentExpiresAt) {
+            const days = Math.ceil(
+              (new Date(updateTargetItem.consentExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+            );
+            return `Your access to ${name} expires in ${days} ${days === 1 ? 'day' : 'days'}. Without renewal, we can no longer sync your financial data.`;
+          }
+          return `Your access to ${name} is expiring soon. Without renewal, we can no longer sync your financial data.`;
+        },
+      },
+      new_accounts: {
+        title: 'Add New Accounts',
+        Icon: Plus,
+        badgeText: 'New Accounts',
+        badgeColor: 'info' as const,
+        buttonText: 'Add Accounts',
+        buttonColor: 'info' as const,
+        iconColor: 'text-info',
+        bgColor: 'bg-info-soft',
+        getExplanation: (name: string) =>
+          `We detected new accounts at ${name} that aren't currently linked. Choose which to add.`,
+      },
+    };
+
+    const config = modeConfig[effectiveMode as keyof typeof modeConfig] || modeConfig.error;
+    const institutionName = updateTargetItem?.institutionName || 'your bank';
+
+    // Update mode: Loading state
+    if (!itemsLoaded) {
+      return (
+        <div className={pageBackground}>
+          <div className="text-center">
+            <div className="mb-4 mx-auto w-8 h-8 border-2 border-t-transparent rounded-full animate-spin border-secondary" />
+            <p className="text-secondary text-sm">Preparing your bank connection...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Update mode: Success state (after Plaid Link completes)
+    if (isSuccess && successMessage) {
+      return (
+        <div className={pageBackground}>
+          <div className="max-w-md w-full text-center">
+            <div className="mb-6 p-4 rounded-full inline-flex bg-success-soft">
+              <CheckCircle className="w-12 h-12 text-success" />
+            </div>
+            <h1 className="text-2xl font-bold mb-3 text-default">All Done</h1>
+            <p className="text-secondary mb-8">{successMessage}</p>
+            <Button
+              onClick={() => window.close()}
+              color="success"
+              size="xl"
+              block
+            >
+              Return to ChatGPT
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Update mode: Error state (after Plaid Link exits with error)
+    if (updateLinkError) {
+      return (
+        <div className={pageBackground}>
+          <div className="max-w-md w-full text-center">
+            <div className="mb-6 p-4 rounded-full inline-flex bg-danger-soft">
+              <ErrorIcon className="w-12 h-12 text-danger" />
+            </div>
+            <h1 className="text-2xl font-bold mb-3 text-default">Connection Failed</h1>
+            <p className="text-secondary mb-8">{updateLinkError}</p>
+            <div className="space-y-3">
+              <Button
+                onClick={() => {
+                  setUpdateLinkError(null);
+                  initializeLinkToken();
+                }}
+                color="danger"
+                size="xl"
+                block
+              >
+                Try Again
+              </Button>
+              <Button
+                onClick={() => window.close()}
+                variant="ghost"
+                color="secondary"
+                size="lg"
+                block
+              >
+                Return to ChatGPT
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Update mode: Already fixed
+    if (updateTargetItem && updateTargetItem.status === 'active' && !targetAction) {
+      return (
+        <div className={pageBackground}>
+          <div className="max-w-md w-full text-center">
+            <div className="mb-6 p-4 rounded-full inline-flex bg-success-soft">
+              <CheckCircle className="w-12 h-12 text-success" />
+            </div>
+            <h1 className="text-2xl font-bold mb-3 text-default">Already Working</h1>
+            <p className="text-secondary mb-8">
+              Your {updateTargetItem.institutionName || 'bank'} connection is working correctly. No action is needed.
+            </p>
+            <Button
+              onClick={() => window.close()}
+              color="success"
+              size="xl"
+              block
+            >
+              Return to ChatGPT
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Update mode: Item not found
+    if (!updateTargetItem) {
+      return (
+        <div className={pageBackground}>
+          <div className="max-w-md w-full text-center">
+            <div className="mb-6 p-4 rounded-full inline-flex bg-surface-secondary">
+              <Business className="w-12 h-12 text-tertiary" />
+            </div>
+            <h1 className="text-2xl font-bold mb-3 text-default">Connection Not Found</h1>
+            <p className="text-secondary mb-8">
+              This bank connection could not be found. It may have been removed or is no longer available.
+            </p>
+            <Button
+              onClick={() => window.close()}
+              variant="ghost"
+              color="secondary"
+              size="xl"
+              block
+            >
+              Return to ChatGPT
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Update mode: Action needed (primary state)
+    const ModeIcon = config.Icon;
+    return (
+      <div className={cn("min-h-screen flex flex-col p-4", isDark ? "bg-linear-to-br from-gray-900 to-gray-800" : "bg-linear-to-br from-gray-50 to-gray-100")}>
+        {/* Top bar */}
+        <div className="flex justify-end mb-8">
+          <Button
+            variant="ghost"
+            color="secondary"
+            onClick={() => window.close()}
+          >
+            Return to ChatGPT
+          </Button>
+        </div>
+
+        {/* Centered content */}
+        <div className="flex-1 flex items-center justify-center">
+          <div className="max-w-md w-full">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className={cn("mb-4 p-4 rounded-full inline-flex", config.bgColor)}>
+                <ModeIcon className={cn("w-10 h-10", config.iconColor)} />
+              </div>
+              <h1 className="text-2xl font-bold mb-2 text-default">{config.title}</h1>
+              <Badge color={config.badgeColor}>{config.badgeText}</Badge>
+            </div>
+
+            {/* Item card */}
+            <div className="p-4 rounded-lg border mb-6 bg-surface border-subtle">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-surface-secondary">
+                  <Business className="w-5 h-5 text-secondary" />
+                </div>
+                <div>
+                  <p className="font-medium text-default">{updateTargetItem.institutionName || 'Financial Institution'}</p>
+                  <p className="text-xs text-secondary">
+                    {formatAccountSummary(updateTargetItem.accountCount, updateTargetItem.createdAt)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Explanation */}
+            <p className="text-secondary text-sm mb-8 text-center">
+              {config.getExplanation(institutionName)}
+            </p>
+
+            {/* Action button */}
+            <Button
+              onClick={handleConnect}
+              disabled={!ready}
+              color={config.buttonColor}
+              size="xl"
+              block
+            >
+              {!ready ? 'Preparing...' : config.buttonText}
+            </Button>
+
+            {/* Footer hint */}
+            <p className="text-xs text-tertiary text-center mt-4">
+              Opens a secure window via Plaid to verify your identity.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Only show full-page error for critical issues (not limit reached)
   if (pageData.error && !pageData.error.includes('Account limit')) {
     return (
-      <div className={cn("min-h-screen flex items-center justify-center p-4", isDark ? "bg-linear-to-br from-gray-900 to-gray-800" : "bg-linear-to-br from-gray-50 to-gray-100")}>
+      <div className={pageBackground}>
         <div className={cn("max-w-md w-full rounded-xl shadow-2xl p-8 border", isDark ? "bg-gray-800 border-red-500/30" : "bg-white border-red-300")}>
           <div className="text-center">
             <div className="mb-6">
@@ -369,10 +709,9 @@ export default function ConnectBankClient() {
             Manage Financial Accounts
           </h1>
           <Button
-            onClick={() => window.close()}
             variant="ghost"
             color="secondary"
-            size="md"
+            onClick={() => window.close()}
           >
             Return to ChatGPT
           </Button>
@@ -397,7 +736,9 @@ export default function ConnectBankClient() {
                 Account limit reached ({planInfo?.current}/{planInfo?.maxFormatted})
               </p>
               <p className="text-xs mt-1 text-warning-soft">
-                Remove an account or upgrade your plan to connect more.
+                {planInfo?.subscriptionsEnabled === false
+                  ? 'Remove an existing connection to add a new one.'
+                  : 'Remove an account or upgrade your plan to connect more.'}
               </p>
             </div>
           </div>
@@ -468,7 +809,7 @@ export default function ConnectBankClient() {
               {limitReached ? 'Limit Reached' : !ready ? 'Loading...' : 'Connect Bank Account'}
             </Button>
 
-            {limitReached && planInfo?.subscriptionsEnabled && (
+            {limitReached && planInfo?.subscriptionsEnabled !== false && (
               <ButtonLink
                 href="/pricing"
                 color="primary"
@@ -518,64 +859,80 @@ export default function ConnectBankClient() {
                   <p className="text-xs mt-1 text-tertiary">Connect your first account to get started</p>
                 </div>
               ) : (
-                connectedItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-4 rounded-lg border bg-surface-secondary border-subtle"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Business className="w-4 h-4 text-secondary" />
-                          <p className="font-medium text-default">{item.institutionName || 'Financial Institution'}</p>
-                          {getStatusBadge(item.status)}
-                        </div>
-                        <p className="text-xs text-secondary">
-                          {item.accountCount !== undefined && item.accountCount > 0
-                            ? `${item.accountCount} ${item.accountCount === 1 ? 'account' : 'accounts'} • `
-                            : ''}
-                          Connected {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'recently'}
-                        </p>
-                        {item.status === 'error' && item.errorMessage && (
-                          <p className="text-xs mt-2 text-danger">
-                            {item.errorMessage}
+                connectedItems.map((item) => {
+                  const actionRequired = getItemActionRequired(item);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-4 rounded-lg border bg-surface-secondary border-subtle"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Business className="w-4 h-4 text-secondary" />
+                            <p className="font-medium text-default">{item.institutionName || 'Financial Institution'}</p>
+                            {getStatusBadge(item)}
+                          </div>
+                          <p className="text-xs text-secondary">
+                            {formatAccountSummary(item.accountCount, item.createdAt)}
                           </p>
-                        )}
-                      </div>
-                      <div className="flex gap-2 ml-4">
-                        {item.status === 'error' && (
+                          {actionRequired && (
+                            <p className={cn("text-xs mt-2", ACTION_TYPE_TEXT_COLORS[actionRequired.type])}>
+                              {actionRequired.message}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          {actionRequired && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              color={ACTION_TYPE_COLORS[actionRequired.type]}
+                              onClick={() => handleUpdateItem(
+                                item.id,
+                                actionRequired.type === 'new_accounts' ? 'new_accounts' : undefined
+                              )}
+                              title={actionRequired.actionLabel}
+                            >
+                              <Reload className="w-4 h-4" />
+                              <span className="ml-1 text-xs">{actionRequired.actionLabel}</span>
+                            </Button>
+                          )}
+                          {actionRequired?.type === 'new_accounts' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              color="secondary"
+                              onClick={() => handleDismissNewAccounts(item.id)}
+                              title="Dismiss"
+                            >
+                              <span className="text-xs">Dismiss</span>
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            color="info"
-                            onClick={() => handleUpdateItem(item.id)}
-                            title="Re-authenticate"
+                            color="danger"
+                            onClick={() => handleDeleteItem(item.id, item.institutionName)}
+                            disabled={deletingItemId === item.id || (deletionInfo && !deletionInfo.canDelete)}
+                            title={
+                              deletionInfo && !deletionInfo.canDelete
+                                ? `Next deletion available in ${deletionInfo.daysUntilNext} days`
+                                : "Disconnect account"
+                            }
                           >
-                            <Reload className="w-4 h-4" />
+                            {deletingItemId === item.id ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500" />
+                            ) : (
+                              <Trash className="w-4 h-4" />
+                            )}
                           </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          color="danger"
-                          onClick={() => handleDeleteItem(item.id, item.institutionName)}
-                          disabled={deletingItemId === item.id || (deletionInfo && !deletionInfo.canDelete)}
-                          title={
-                            deletionInfo && !deletionInfo.canDelete
-                              ? `Next deletion available in ${deletionInfo.daysUntilNext} days`
-                              : "Disconnect account"
-                          }
-                        >
-                          {deletingItemId === item.id ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500" />
-                          ) : (
-                            <Trash className="w-4 h-4" />
-                          )}
-                        </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

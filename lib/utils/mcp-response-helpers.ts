@@ -9,9 +9,6 @@ import type {
 } from "@/lib/types/mcp-responses";
 import type { AuthChallengeContent } from "@/lib/types/tool-responses";
 import { createTextContent } from "@/lib/types/mcp-responses";
-import { createUIResource } from '@mcp-ui/server';
-import type { CreateUIResourceOptions } from '@mcp-ui/server';
-import { baseURL } from "@/baseUrl";
 
 /**
  * Creates a generic error response that matches AuthChallengeContent structure

@@ -3,20 +3,23 @@
  * Based on: https://modelcontextprotocol.io/specification/2025-06-18/server/tools
  */
 
-import type { UIResource } from '@mcp-ui/server';
-
 /**
  * Content types that can be returned in MCP responses
  * The model reads both content and structuredContent
  *
  * Based on MCP SDK ContentType from @modelcontextprotocol/sdk
- * Updated to use mcp-ui's UIResource type for resource content
  */
 export type MCPContent =
   | { type: "text"; text: string; _meta?: Record<string, unknown> }
   | { type: "image"; data: string; mimeType: string; _meta?: Record<string, unknown> }
   | { type: "audio"; data: string; mimeType: string; _meta?: Record<string, unknown> }
-  | { type: "resource"; resource: UIResource['resource']; _meta?: Record<string, unknown> };
+  | {
+      type: "resource";
+      resource:
+        | { uri: string; text: string; mimeType?: string; _meta?: Record<string, unknown> }
+        | { uri: string; blob: string; mimeType?: string; _meta?: Record<string, unknown> };
+      _meta?: Record<string, unknown>;
+    };
 
 /**
  * OpenAI-specific metadata for tool responses
@@ -87,8 +90,8 @@ export interface OpenAIResponseMetadata {
  * This is what your tool handlers should return
  */
 export interface MCPToolResponse<
-  TStructuredContent extends Record<string, unknown> = Record<string, unknown>,
-  TMetadata extends Record<string, unknown> = Record<string, unknown>
+  TStructuredContent = Record<string, unknown>,
+  TMetadata = Record<string, unknown>
 > {
   /**
    * Content surfaced to both the model and the component
@@ -144,10 +147,9 @@ export const createImageContent = (
 /**
  * Helper to create a resource content item with proper typing
  * Note: Must provide either `text` or `blob`
- * @deprecated Use createUIResource from @mcp-ui/server instead for widget resources
  */
 export const createResourceContent = (
-  uri: `ui://${string}`,
+  uri: string,
   content: { text: string; mimeType?: string } | { blob: string; mimeType?: string },
   meta?: Record<string, unknown>
 ): MCPContent => ({
@@ -155,7 +157,7 @@ export const createResourceContent = (
   resource: {
     uri,
     ...content
-  } as UIResource['resource'],
+  },
   ...(meta && { _meta: meta })
 });
 
@@ -163,8 +165,8 @@ export const createResourceContent = (
  * Helper to create a complete MCP tool response with proper typing
  */
 export const createMCPResponse = <
-  TStructuredContent extends Record<string, unknown> = Record<string, unknown>,
-  TMetadata extends Record<string, unknown> = Record<string, unknown>
+  TStructuredContent = Record<string, unknown>,
+  TMetadata = Record<string, unknown>
 >(
   content: MCPContent[],
   options?: {

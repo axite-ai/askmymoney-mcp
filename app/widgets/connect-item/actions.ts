@@ -2,11 +2,12 @@
 
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
-import { plaidItems, plaidAccounts, subscription } from '@/lib/db/schema';
-import { eq, and, inArray, desc, sql } from 'drizzle-orm';
+import { plaidItems, plaidAccounts } from '@/lib/db/schema';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { ItemDeletionService } from '@/lib/services/item-deletion-service';
 import { getMaxAccountsForPlan, formatAccountLimit } from '@/lib/utils/plan-limits';
+import { getEffectivePlan } from '@/lib/utils/subscription-helpers';
 import { FEATURES } from '@/lib/config/features';
 
 export interface ConnectedItem {
@@ -33,6 +34,7 @@ export interface ConnectItemStatus {
     max: number;
     maxFormatted: string;
     planName: string;
+    subscriptionsEnabled: boolean;
   };
   deletionStatus: {
     canDelete: boolean;
@@ -76,43 +78,23 @@ export async function getConnectItemStatus(userId?: string): Promise<StatusResul
       resolvedUserId = session.user.id;
     }
 
-    // Get user's subscription and plan
-    const userSubscriptions = await db
-      .select({ plan: subscription.plan })
-      .from(subscription)
-      .where(
-        and(
-          eq(subscription.referenceId, resolvedUserId),
-          inArray(subscription.status, ['active', 'trialing'])
-        )
-      )
-      .orderBy(desc(subscription.periodStart))
-      .limit(1);
-
-    const userSubscription = userSubscriptions[0];
-    const plan = userSubscription?.plan || null;
+    // Get user's effective plan (returns 'free' when subscriptions disabled)
+    const plan = await getEffectivePlan(resolvedUserId);
     const maxAccounts = getMaxAccountsForPlan(plan);
 
-    console.log('[getConnectItemStatus] Subscription check:', {
-      hasSubscription: !!userSubscription,
+    console.log('[getConnectItemStatus] Plan check:', {
       plan,
       maxAccounts,
       userId: resolvedUserId,
-      subscriptionsEnabled: FEATURES.SUBSCRIPTIONS,
     });
 
-    // If subscriptions are enabled and no active subscription, return error
-    if (FEATURES.SUBSCRIPTIONS && (!plan || maxAccounts === null)) {
-      console.log('[getConnectItemStatus] No subscription - returning error');
+    if (!plan || maxAccounts === null) {
+      console.log('[getConnectItemStatus] No plan - returning error');
       return {
         success: false,
         error: "Active subscription required to manage accounts",
       };
     }
-
-    // If subscriptions are disabled, use basic plan limits as default
-    const effectivePlan = FEATURES.SUBSCRIPTIONS ? plan : 'basic';
-    const effectiveMaxAccounts = FEATURES.SUBSCRIPTIONS ? maxAccounts : getMaxAccountsForPlan('basic');
 
     // Get all active/pending/error items (exclude deleted and revoked)
     const items = await db
@@ -172,12 +154,13 @@ export async function getConnectItemStatus(userId?: string): Promise<StatusResul
         items: connectedItems,
         planLimits: {
           current: items.length,
-          max: effectiveMaxAccounts!,
-          maxFormatted: formatAccountLimit(effectiveMaxAccounts),
-          planName: effectivePlan!,
+          max: maxAccounts,
+          maxFormatted: formatAccountLimit(maxAccounts),
+          planName: plan,
+          subscriptionsEnabled: FEATURES.SUBSCRIPTIONS,
         },
         deletionStatus,
-        canConnect: items.length < effectiveMaxAccounts!,
+        canConnect: items.length < maxAccounts,
       },
     };
   } catch (error) {

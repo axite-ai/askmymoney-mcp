@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
 import {
   Expand,
   Search,
@@ -20,8 +21,11 @@ import { useToolInfo, useWidgetState, useDisplayMode, useOpenAiGlobal } from "@/
 import { formatCurrency, formatDate } from "@/src/utils/format";
 import { checkWidgetAuth } from "@/src/utils/widget-auth-check";
 import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-skeleton";
+import { FollowUpButton, FOLLOW_UP_PROMPTS } from "@/src/components/shared/follow-up-button";
 import { cn } from "@/lib/utils/cn";
+import { fadeSlideUp, staggerContainer, listItem } from "@/src/lib/animation-variants";
 import type { Transaction } from "plaid";
+import type { SafeArea, UserAgent } from "@/src/mcp-ui-hooks";
 
 interface TransactionWithEnrichment extends Transaction {
   // All fields from Plaid Transaction type are available
@@ -113,8 +117,38 @@ export default function Transactions() {
   });
 
   const [displayMode, requestDisplayMode] = useDisplayMode();
-  const maxHeight = useOpenAiGlobal("maxHeight") as number | string | undefined;
+  const maxHeight = useOpenAiGlobal("maxHeight") as number | undefined;
+  const safeArea = useOpenAiGlobal("safeArea") as SafeArea | undefined;
+  const userAgent = useOpenAiGlobal("userAgent") as UserAgent | undefined;
+
   const isFullscreen = displayMode === "fullscreen";
+  const isInline = displayMode === "inline";
+  const isMobile = userAgent?.device?.type === "mobile" || (typeof maxHeight === "number" && maxHeight < 720);
+
+  // Safe area insets for mobile devices with notches
+  const safeInsets = useMemo(() => ({
+    paddingTop: safeArea?.insets?.top ?? 0,
+    paddingBottom: safeArea?.insets?.bottom ?? 0,
+    paddingLeft: safeArea?.insets?.left ?? 0,
+    paddingRight: safeArea?.insets?.right ?? 0,
+  }), [safeArea]);
+
+  // Dynamic padding based on display mode
+  const containerPadding = isInline ? 12 : isMobile ? 20 : 32;
+
+  // Keyboard navigation for fullscreen mode
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        requestDisplayMode("inline");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen, requestDisplayMode]);
 
   // Extract data from toolInfo
   // Note: toolInfo.output IS the structuredContent directly in Skybridge
@@ -191,14 +225,18 @@ export default function Transactions() {
   }
 
   return (
-    <div
+    <motion.div
+      variants={fadeSlideUp}
+      initial="initial"
+      animate="animate"
       className={cn(
         "antialiased w-full relative bg-transparent text-default",
         !isFullscreen && "overflow-hidden"
       )}
       style={{
-        maxHeight: maxHeight ?? undefined,
-        height: isFullscreen ? maxHeight ?? undefined : undefined,
+        maxHeight: typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : undefined,
+        height: isFullscreen ? (typeof maxHeight === "number" && maxHeight > 0 ? maxHeight : "100vh") : 400,
+        ...safeInsets,
       }}
     >
       {!isFullscreen && (
@@ -214,7 +252,10 @@ export default function Transactions() {
         </Button>
       )}
 
-      <div className={cn("w-full h-full overflow-y-auto", isFullscreen ? "p-8" : "p-0")}>
+      <div
+        className="w-full h-full overflow-y-auto"
+        style={{ padding: isFullscreen ? containerPadding : 0 }}
+      >
         {/* Header - Only show full header in fullscreen */}
         <div className="mb-6">
           <h1 className="heading-lg mb-2">
@@ -477,7 +518,30 @@ export default function Transactions() {
             Showing {filteredTransactions.length} of {toolOutput?.totalTransactions ?? transactions.length} transactions
           </div>
         )}
+
+        {/* Follow-up Actions */}
+        {isFullscreen && (
+          <motion.div
+            variants={fadeSlideUp}
+            initial="initial"
+            animate="animate"
+            className="mt-6 flex flex-wrap gap-3"
+          >
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.analyzeSpending(uiState?.selectedCategory ? formatCategoryName(uiState.selectedCategory) : "all categories")}
+              label="Analyze Spending"
+            />
+            <FollowUpButton
+              prompt={FOLLOW_UP_PROMPTS.categorizeTransactions}
+              label="Help Categorize"
+            />
+            <FollowUpButton
+              prompt="Find unusual or duplicate transactions in my recent activity"
+              label="Find Anomalies"
+            />
+          </motion.div>
+        )}
       </div>
-    </div>
+    </motion.div>
   );
 }

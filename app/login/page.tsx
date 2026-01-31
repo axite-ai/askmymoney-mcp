@@ -1,21 +1,12 @@
 "use client";
 
-import { useSession } from "@/lib/auth/client";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { signIn } from "@/lib/auth/client";
 
 function LoginContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackURL") || "/";
-  const { data: session } = useSession();
-
-  useEffect(() => {
-    if (session) {
-      router.push(callbackUrl);
-    }
-  }, [session, router, callbackUrl]);
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
@@ -37,9 +28,13 @@ function LoginContent() {
                   ? `/api/auth/mcp/authorize?${searchParams.toString()}`
                   : callbackUrl; // Fallback to provided callback or home
 
+                // Redirect to onboarding first to ensure passkey setup
+                const onboardingURL = `/onboarding?callbackURL=${encodeURIComponent(finalRedirect)}`;
+
                 signIn.social({
                     provider: "google",
-                    callbackURL: finalRedirect,
+                    callbackURL: onboardingURL,
+                    newUserCallbackURL: onboardingURL,
                 });
             }}
             className="flex w-full items-center justify-center gap-3 rounded-md bg-white px-4 py-3 text-black hover:bg-gray-100 transition-colors font-medium border border-gray-200"

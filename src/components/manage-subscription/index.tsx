@@ -9,6 +9,7 @@ import {
   FileDocument,
   CloseBold,
   Expand,
+  ShieldCheck,
 } from "@openai/apps-sdk-ui/components/Icon";
 import { Button } from "@openai/apps-sdk-ui/components/Button";
 import { Badge } from "@openai/apps-sdk-ui/components/Badge";
@@ -74,6 +75,52 @@ export default function ManageSubscription() {
   ];
 
   if (!billingPortalUrl) {
+    // Free plan - show informational card instead of error
+    if (currentPlan === "Free") {
+      return (
+        <div
+          className={cn(
+            "antialiased w-full relative bg-transparent text-default",
+            !isFullscreen && "overflow-hidden"
+          )}
+          style={{
+            maxHeight: maxHeight ?? undefined,
+            height: isFullscreen ? maxHeight ?? undefined : 400,
+            minHeight: isFullscreen ? undefined : 400,
+          }}
+        >
+          <div
+            className={cn(
+              "w-full h-full overflow-y-auto flex flex-col items-center justify-center",
+              isFullscreen ? "p-8" : "p-6"
+            )}
+          >
+            <AnimateLayout>
+              <div
+                key="free-plan-info"
+                className="w-full max-w-md mx-auto text-center flex flex-col items-center"
+              >
+                <div className="p-4 rounded-2xl flex items-center justify-center flex-shrink-0 bg-success-solid text-white mb-6">
+                  <ShieldCheck strokeWidth={1.5} className="h-8 w-8" />
+                </div>
+                <h2 className="heading-xl mb-2 text-default">Free Plan</h2>
+                <p className="text-md text-secondary max-w-sm mx-auto mb-6">
+                  You have free access with up to 2 connected financial accounts.
+                </p>
+                <div className="w-full p-4 rounded-xl border bg-success-soft border-success-surface">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-success">Current Plan</span>
+                    <Badge color="success" size="lg" pill>Free</Badge>
+                  </div>
+                </div>
+              </div>
+            </AnimateLayout>
+          </div>
+        </div>
+      );
+    }
+
+    // Paid subscriptions enabled but billing portal not configured - show error
     return (
       <div
         className={cn(
@@ -82,7 +129,7 @@ export default function ManageSubscription() {
         )}
         style={{
           maxHeight: maxHeight ?? undefined,
-          height: isFullscreen ? maxHeight ?? undefined : undefined,
+          height: isFullscreen ? maxHeight ?? undefined : 400,
         }}
       >
         <div

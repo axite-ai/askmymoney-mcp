@@ -19,12 +19,18 @@ export default function Home() {
     : undefined;
   const name = toolOutput?.name;
 
+  const isFullscreen = displayMode === "fullscreen";
+
+  // Default inline height to prevent resize loops
+  // When embedded in ChatGPT, widgets without explicit height cause ResizeObserver loops
+  const inlineHeight = 400;
+
   return (
     <div
-      className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center p-8 pb-20 gap-16 sm:p-20"
+      className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center p-8 pb-20 gap-16 sm:p-20 overflow-hidden"
       style={{
-        maxHeight,
-        height: displayMode === "fullscreen" ? maxHeight : undefined,
+        maxHeight: maxHeight ?? undefined,
+        height: isFullscreen ? maxHeight : inlineHeight,
       }}
     >
       {displayMode !== "fullscreen" && (

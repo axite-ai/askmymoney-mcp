@@ -8,12 +8,13 @@
 import crypto from 'crypto';
 import { jwtVerify, decodeJwt, importJWK } from 'jose';
 import { db } from '@/lib/db';
-import { plaidWebhooks, plaidItems } from '@/lib/db/schema';
+import { plaidWebhooks, plaidItems, user } from '@/lib/db/schema';
 import { eq, desc, and, gte, sql } from 'drizzle-orm';
 import { logger, LoggerService, AuditEventType } from './logger-service';
 import { UserService } from './user-service';
 import { syncTransactionsForItem, plaidClient } from './plaid-service';
 import { isProductionDeployment } from '@/lib/utils/env-validation';
+import { EmailService, type ItemAttentionType } from './email-service';
 
 /**
  * Plaid webhook payload structure
@@ -31,6 +32,7 @@ export interface PlaidWebhook {
   new_transactions?: number;
   removed_transactions?: string[];
   consent_expiration_time?: string; // ISO 8601 timestamp for PENDING_EXPIRATION webhook
+  reason?: string; // Reason for PENDING_DISCONNECT webhook
   [key: string]: unknown;
 }
 
@@ -336,6 +338,16 @@ export class WebhookService {
             success: false,
             errorMessage: webhook.error.error_message,
           });
+
+          // Send email notification
+          await this.sendItemAttentionEmailIfNeeded(
+            userId,
+            webhook.item_id,
+            webhook.webhook_type,
+            webhook.webhook_code,
+            'error',
+            webhook.error.error_message
+          );
         }
         break;
 
@@ -343,6 +355,7 @@ export class WebhookService {
         // Access token will expire soon (7 days warning)
         if (userId && webhook.consent_expiration_time) {
           const expiresAt = new Date(webhook.consent_expiration_time);
+          const daysRemaining = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
           await db
             .update(plaidItems)
@@ -356,7 +369,7 @@ export class WebhookService {
             userId,
             itemId: webhook.item_id,
             expiresAt: expiresAt.toISOString(),
-            daysRemaining: Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+            daysRemaining,
           });
 
           await LoggerService.audit({
@@ -368,6 +381,60 @@ export class WebhookService {
             },
             success: true,
           });
+
+          await this.sendItemAttentionEmailIfNeeded(
+            userId,
+            webhook.item_id,
+            webhook.webhook_type,
+            webhook.webhook_code,
+            'expiring',
+            `Expires in ${daysRemaining} days`
+          );
+        }
+        break;
+
+      case 'PENDING_DISCONNECT':
+        // Institution will disconnect this item soon (typically 7 days)
+        if (userId) {
+          const disconnectDate = new Date();
+          disconnectDate.setDate(disconnectDate.getDate() + 7);
+
+          await db
+            .update(plaidItems)
+            .set({
+              consentExpiresAt: disconnectDate,
+              lastWebhookAt: new Date(),
+            })
+            .where(eq(plaidItems.itemId, webhook.item_id));
+
+          logger.warn('[Webhook] Item pending disconnect', {
+            userId,
+            itemId: webhook.item_id,
+            reason: webhook.reason,
+            disconnectDate: disconnectDate.toISOString(),
+          });
+
+          await LoggerService.audit({
+            userId,
+            eventType: AuditEventType.ITEM_EXPIRING,
+            eventData: {
+              itemId: webhook.item_id,
+              reason: webhook.reason,
+              disconnectDate: disconnectDate.toISOString(),
+              source: 'pending_disconnect',
+            },
+            success: true,
+          });
+
+          // Send email notification
+          await this.sendItemAttentionEmailIfNeeded(
+            userId,
+            webhook.item_id,
+            webhook.webhook_type,
+            webhook.webhook_code,
+            'pending_disconnect',
+            webhook.reason
+          );
         }
         break;
 
@@ -396,6 +463,15 @@ export class WebhookService {
             eventData: { itemId: webhook.item_id },
             success: true,
           });
+
+          // Send email prompting user to add new accounts
+          await this.sendItemAttentionEmailIfNeeded(
+            userId,
+            webhook.item_id,
+            webhook.webhook_type,
+            webhook.webhook_code,
+            'new_accounts'
+          );
         }
         break;
 
@@ -424,6 +500,9 @@ export class WebhookService {
             eventData: { itemId: webhook.item_id, source: 'external' },
             success: true,
           });
+
+          // Send "good news" email to user
+          await this.sendLoginRepairedEmail(userId, webhook.item_id);
         }
         break;
 
@@ -607,5 +686,139 @@ export class WebhookService {
       .limit(limit);
 
     return result as WebhookRecord[];
+  }
+
+  /**
+   * Check if a similar email was already sent within the last 24 hours (spam prevention)
+   */
+  private static async wasEmailRecentlySent(
+    itemId: string,
+    webhookType: string,
+    webhookCode: string
+  ): Promise<boolean> {
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+
+    const recent = await db
+      .select({ id: plaidWebhooks.id })
+      .from(plaidWebhooks)
+      .where(
+        and(
+          eq(plaidWebhooks.itemId, itemId),
+          eq(plaidWebhooks.webhookType, webhookType),
+          eq(plaidWebhooks.webhookCode, webhookCode),
+          eq(plaidWebhooks.processed, true),
+          gte(plaidWebhooks.receivedAt, oneDayAgo)
+        )
+      )
+      .limit(1);
+
+    return recent.length > 0;
+  }
+
+  /**
+   * Resolve the common context needed to send any webhook-triggered email.
+   * Handles 24-hour dedup, parallel user/item lookup, and null-safety.
+   * Returns null when the email should be skipped (already sent or missing data).
+   */
+  private static async resolveItemEmailContext(
+    userId: string,
+    itemId: string,
+    webhookType: string,
+    webhookCode: string
+  ): Promise<{ email: string; userName: string; institutionName: string } | null> {
+    const recentlySent = await this.wasEmailRecentlySent(itemId, webhookType, webhookCode);
+    if (recentlySent) {
+      logger.info('[Webhook] Skipping email - already sent within 24 hours', {
+        itemId,
+        webhookCode,
+      });
+      return null;
+    }
+
+    const [userDetailsResult, itemResult] = await Promise.all([
+      db.select({ email: user.email, name: user.name })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1),
+      db.select({ institutionName: plaidItems.institutionName })
+        .from(plaidItems)
+        .where(eq(plaidItems.itemId, itemId))
+        .limit(1),
+    ]);
+
+    const userDetails = userDetailsResult[0];
+    if (!userDetails?.email) {
+      logger.warn('[Webhook] Cannot send email - user email not found', { userId });
+      return null;
+    }
+
+    return {
+      email: userDetails.email,
+      userName: userDetails.name || 'there',
+      institutionName: itemResult[0]?.institutionName || 'your financial institution',
+    };
+  }
+
+  /**
+   * Send a webhook-triggered email with shared dedup, lookup, and error handling.
+   * The `send` callback receives the resolved user/item context and dispatches
+   * the appropriate EmailService method.
+   */
+  private static async sendWebhookEmail(
+    userId: string,
+    itemId: string,
+    webhookType: string,
+    webhookCode: string,
+    emailLabel: string,
+    send: (ctx: { email: string; userName: string; institutionName: string }) => Promise<unknown>
+  ): Promise<void> {
+    try {
+      const ctx = await this.resolveItemEmailContext(userId, itemId, webhookType, webhookCode);
+      if (!ctx) return;
+
+      await send(ctx);
+
+      logger.info(`[Webhook] ${emailLabel} email sent`, {
+        userId,
+        itemId,
+        email: ctx.email,
+      });
+    } catch (error) {
+      // Don't let email failures break webhook processing
+      logger.error(`[Webhook] Failed to send ${emailLabel} email`, {
+        userId,
+        itemId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * Send an attention email for a Plaid item if not recently sent
+   */
+  private static async sendItemAttentionEmailIfNeeded(
+    userId: string,
+    itemId: string,
+    webhookType: string,
+    webhookCode: string,
+    attentionType: ItemAttentionType,
+    details?: string
+  ): Promise<void> {
+    await this.sendWebhookEmail(userId, itemId, webhookType, webhookCode, 'Attention', (ctx) =>
+      EmailService.sendItemAttentionEmail(ctx.email, ctx.userName, ctx.institutionName, attentionType, details)
+    );
+  }
+
+  /**
+   * Send a "login repaired" email notification with 24-hour dedup
+   */
+  private static async sendLoginRepairedEmail(
+    userId: string,
+    itemId: string
+  ): Promise<void> {
+    await this.sendWebhookEmail(userId, itemId, 'ITEM', 'LOGIN_REPAIRED', 'Login repaired', (ctx) =>
+      EmailService.sendLoginRepairedEmail(ctx.email, ctx.userName, ctx.institutionName)
+    );
   }
 }

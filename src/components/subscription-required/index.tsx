@@ -64,10 +64,6 @@ interface SubscriptionRequiredContent {
   pricingUrl?: string;
 }
 
-interface SubscriptionRequiredMetadata {
-  userId?: string;
-}
-
 export default function SubscriptionRequired() {
   const toolInfo = useToolInfo();
   const [displayMode] = useDisplayMode();
@@ -80,9 +76,6 @@ export default function SubscriptionRequired() {
   const toolOutput = toolInfo.isSuccess
     ? (toolInfo.output as SubscriptionRequiredContent | undefined)
     : undefined;
-  const toolMetadata = toolInfo.isSuccess
-    ? (toolInfo.responseMetadata as SubscriptionRequiredMetadata)
-    : undefined;
 
   const [selectedPlan, setSelectedPlan] = useState<string>("pro");
   const [isLoading, setIsLoading] = useState(false);
@@ -93,21 +86,15 @@ export default function SubscriptionRequired() {
   }, [selectedPlan]);
 
   const featureName = toolOutput?.featureName || "this feature";
-  const userId = toolMetadata?.userId;
 
   const handleSubscribe = async () => {
     if (!selectedPlan || isLoading) return;
-
-    if (!userId) {
-      setError("Authentication error. Please refresh and try again.");
-      return;
-    }
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const result = await upgradeSubscription(userId, selectedPlan);
+      const result = await upgradeSubscription(selectedPlan);
 
       if (!result.success) {
         throw new Error(result.error || "Failed to create checkout session");
@@ -127,6 +114,7 @@ export default function SubscriptionRequired() {
       setError(
         error instanceof Error ? error.message : "Failed to start subscription. Please try again."
       );
+    } finally {
       setIsLoading(false);
     }
   };
