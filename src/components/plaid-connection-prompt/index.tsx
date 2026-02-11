@@ -36,7 +36,7 @@ export default function PlaidConnectionPrompt() {
       toolOutput?.connectUrl ||
       (toolOutput?.baseUrl
         ? `${toolOutput.baseUrl}/connect-bank`
-        : "https://dev.askmymoney.ai/connect-bank");
+        : "https://askmymoney.ai/connect-bank");
 
     console.log('[Plaid Connect] Opening link:', connectUrl);
 

@@ -52,6 +52,24 @@ export function isProductNotSupported(error: any): boolean {
 }
 
 /**
+ * Fetch the institution logo (base64) from Plaid
+ * @param institutionId Plaid institution ID
+ * @returns base64 logo string or null if unavailable
+ */
+export async function getInstitutionLogo(institutionId: string): Promise<string | null> {
+  try {
+    const response = await getPlaidClient().institutionsGetById({
+      institution_id: institutionId,
+      country_codes: [CountryCode.Us],
+      options: { include_optional_metadata: true },
+    });
+    return response.data.institution.logo || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Get or create a Plaid user token for Multi-Item Link
  * Checks database for existing token, creates new one if not found
  * @param userId Unique user identifier

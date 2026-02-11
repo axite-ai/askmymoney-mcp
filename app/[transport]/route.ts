@@ -1201,9 +1201,9 @@ const handler = withMcpAuth(auth, async (req, session) => {
           // Note: openai/widgetCSP must be on the resource _meta, not on the tool _meta
         },
         annotations: {
-          destructiveHint: false,
-          openWorldHint: false,
-          readOnlyHint: true,
+          destructiveHint: true, // Users can cancel/modify subscriptions via Stripe portal
+          openWorldHint: true, // Interacts with external Stripe billing system
+          readOnlyHint: false, // Widget allows subscription changes
           idempotentHint: true,
         },
         // @ts-expect-error - securitySchemes not yet in MCP SDK types
@@ -1304,8 +1304,9 @@ const handler = withMcpAuth(auth, async (req, session) => {
           "openai/widgetAccessible": true,
         },
         annotations: {
-          destructiveHint: false, // Deletion happens in a separate server action inside the widget
-          readOnlyHint: true, // This tool call only reads data to display the widget
+          destructiveHint: true, // Widget allows disconnecting bank accounts (soft-delete + Plaid revocation)
+          openWorldHint: true, // Interacts with Plaid Link for external bank connections
+          readOnlyHint: false, // Widget enables adding and removing bank connections
           idempotentHint: true,
         },
         // @ts-expect-error - securitySchemes not yet in MCP SDK types
@@ -1755,7 +1756,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
       annotations: {
         destructiveHint: false,
         openWorldHint: false,
-        readOnlyHint: true,
+        readOnlyHint: false, // Tool can apply category changes when autoApply is true
         idempotentHint: true,
       },
       // @ts-expect-error - securitySchemes not yet in MCP SDK types

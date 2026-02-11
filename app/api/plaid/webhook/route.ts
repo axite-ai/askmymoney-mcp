@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { plaidLinkSessions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { WebhookService } from '@/lib/services/webhook-service';
-import { exchangePublicToken, plaidClient } from '@/lib/services/plaid-service';
+import { exchangePublicToken, getInstitutionLogo, plaidClient } from '@/lib/services/plaid-service';
 import { UserService } from '@/lib/services/user-service';
 import { EncryptionService } from '@/lib/services/encryption-service';
 import { logger } from '@/lib/services/logger-service';
@@ -208,6 +208,11 @@ async function handleItemAddResult(
       }
     }
 
+    // Fetch institution logo if we have an institution ID
+    const institutionLogo = institutionId
+      ? await getInstitutionLogo(institutionId)
+      : null;
+
     if (existingItem) {
       // UPDATE MODE: Clear error state and update institution info
       const { plaidItems } = await import('@/lib/db/schema');
@@ -222,6 +227,7 @@ async function handleItemAddResult(
           accessToken: EncryptionService.encrypt(accessToken),
           institutionId: institutionId || existingItem.institutionId,
           institutionName: institutionName || existingItem.institutionName,
+          institutionLogo: institutionLogo || existingItem.institutionLogo,
           lastWebhookAt: new Date(),
         })
         .where(eq(plaidItems.itemId, itemId));
@@ -234,7 +240,8 @@ async function handleItemAddResult(
         itemId,
         accessToken,
         institutionId,
-        institutionName
+        institutionName,
+        institutionLogo
       );
       console.log('[Link Webhook] New item added:', itemId);
     }
@@ -327,12 +334,28 @@ async function handleSessionFinished(
         const alreadyExists = existingItems.some(item => item.itemId === itemId);
 
         if (!alreadyExists) {
+          // Fetch institution details from Plaid
+          let institutionId: string | undefined;
+          let institutionName: string | undefined;
+          let institutionLogo: string | null = null;
+          try {
+            const itemResponse = await plaidClient.itemGet({ access_token: accessToken });
+            institutionId = itemResponse.data.item.institution_id ?? undefined;
+            institutionName = itemResponse.data.item.institution_name ?? undefined;
+            if (institutionId) {
+              institutionLogo = await getInstitutionLogo(institutionId);
+            }
+          } catch (error) {
+            console.error('[Link Webhook] Error fetching institution details in SESSION_FINISHED:', error);
+          }
+
           await UserService.savePlaidItem(
             session.userId,
             itemId,
             accessToken,
-            undefined,
-            undefined
+            institutionId,
+            institutionName,
+            institutionLogo
           );
           console.log('[Link Webhook] Added item from SESSION_FINISHED:', itemId);
         }

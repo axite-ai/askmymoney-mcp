@@ -6,11 +6,12 @@
  */
 
 import { db } from '@/lib/db';
-import { plaidItems, plaidItemDeletions } from '@/lib/db/schema';
-import { eq, and, gte, desc, inArray } from 'drizzle-orm';
+import { plaidItems, plaidItemDeletions, user } from '@/lib/db/schema';
+import { eq, and, gte, desc, inArray, ne } from 'drizzle-orm';
 import { logger } from './logger-service';
 import { plaidClient } from './plaid-service';
 import { EncryptionService } from './encryption-service';
+import { EmailService } from './email-service';
 
 const DELETION_RATE_LIMIT_DAYS = 30;
 
@@ -20,9 +21,6 @@ export interface DeletionInfo {
   daysUntilNext?: number;
 }
 
-/**
- * Item Deletion Service
- */
 export class ItemDeletionService {
   /**
    * Check if user can delete an item (rate limit: 1 deletion per 30 days)
@@ -175,7 +173,120 @@ export class ItemDeletionService {
       institutionName: item.institutionName,
     });
 
-    // 6. Webhook WEBHOOK_UPDATE_ACKNOWLEDGED will be received to confirm deletion
+    // 6. Send disconnection email notification (non-blocking)
+    if (item.institutionName) {
+      this.sendDisconnectionEmail(userId, item.institutionName).catch(() => {});
+    }
+
+    // 7. Webhook WEBHOOK_UPDATE_ACKNOWLEDGED will be received to confirm deletion
+  }
+
+  /**
+   * Send a disconnection confirmation email to the user (best-effort).
+   */
+  private static async sendDisconnectionEmail(
+    userId: string,
+    institutionName: string
+  ): Promise<void> {
+    const [userDetails] = await db
+      .select({ email: user.email, name: user.name })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+
+    if (!userDetails?.email) return;
+
+    try {
+      await EmailService.sendBankDisconnectionConfirmation(
+        userDetails.email,
+        userDetails.name || 'there',
+        institutionName
+      );
+    } catch (error) {
+      logger.warn('[ItemDeletion] Failed to send disconnection email', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * Delete all items for a user (bulk offboarding).
+   * Calls Plaid /item/remove on each, soft deletes in DB, records audit entries.
+   * Skips rate limiting since this is system-initiated.
+   */
+  public static async deleteAllUserItems(
+    userId: string,
+    reason: string
+  ): Promise<{ processed: number; failures: string[] }> {
+    // 1. Get all non-deleted items
+    const items = await db
+      .select()
+      .from(plaidItems)
+      .where(
+        and(
+          eq(plaidItems.userId, userId),
+          ne(plaidItems.status, 'deleted')
+        )
+      );
+
+    if (items.length === 0) {
+      return { processed: 0, failures: [] };
+    }
+
+    const failures: string[] = [];
+
+    // 2. Call Plaid /item/remove for each item
+    for (const item of items) {
+      try {
+        const accessToken = EncryptionService.decrypt(item.accessToken);
+        await plaidClient.itemRemove({ access_token: accessToken });
+        logger.info('[ItemDeletion] Plaid item removed (bulk)', {
+          userId,
+          itemId: item.itemId,
+        });
+      } catch (error) {
+        // Log and continue - don't let one failure block the rest
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        logger.warn('[ItemDeletion] Plaid item removal failed (bulk, continuing)', {
+          userId,
+          itemId: item.itemId,
+          error: msg,
+        });
+        failures.push(`${item.institutionName || item.itemId}: ${msg}`);
+      }
+    }
+
+    // 3. Soft delete all items in one DB update
+    const itemIds = items.map(i => i.id);
+    await db
+      .update(plaidItems)
+      .set({
+        status: 'deleted',
+        deletedAt: new Date(),
+      })
+      .where(inArray(plaidItems.id, itemIds));
+
+    // 4. Record audit entries in batch
+    await db.insert(plaidItemDeletions).values(
+      items.map(item => ({
+        userId,
+        itemId: item.itemId,
+        institutionId: item.institutionId,
+        institutionName: item.institutionName,
+        deletedAt: new Date(),
+        reason,
+      }))
+    );
+
+    logger.info('[ItemDeletion] Bulk deletion complete', {
+      userId,
+      processed: items.length,
+      failures: failures.length,
+      reason,
+    });
+
+    return { processed: items.length, failures };
   }
 
   /**

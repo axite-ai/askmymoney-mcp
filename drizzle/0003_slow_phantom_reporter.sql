@@ -1,0 +1,1 @@
+ALTER TABLE "plaid_items" ADD COLUMN "institution_logo" text;

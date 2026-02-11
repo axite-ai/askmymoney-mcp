@@ -11,6 +11,7 @@ import { db } from '../db';
 import { plaidItems } from '../db/schema';
 import { EncryptionService } from './encryption-service';
 import { logger } from './logger-service';
+import { ItemDeletionService } from './item-deletion-service';
 
 export interface PlaidItem {
   id: string;
@@ -19,6 +20,7 @@ export interface PlaidItem {
   accessToken: string; // Decrypted token
   institutionId: string | null;
   institutionName: string | null;
+  institutionLogo: string | null;
   status: string | null;
   errorCode: string | null;
   errorMessage: string | null;
@@ -57,7 +59,8 @@ export class UserService {
     itemId: string,
     accessToken: string,
     institutionId?: string,
-    institutionName?: string
+    institutionName?: string,
+    institutionLogo?: string | null
   ): Promise<PlaidItem> {
     // Encrypt the access token before storing
     const encryptedToken = EncryptionService.encrypt(accessToken);
@@ -71,6 +74,7 @@ export class UserService {
         accessToken: encryptedToken,
         institutionId: institutionId || null,
         institutionName: institutionName || null,
+        institutionLogo: institutionLogo || null,
         status: 'active', // Item is ready immediately after public token exchange
       })
       .onConflictDoUpdate({
@@ -80,6 +84,7 @@ export class UserService {
           accessToken: encryptedToken,
           institutionId: institutionId || null,
           institutionName: institutionName || null,
+          institutionLogo: institutionLogo || null,
           // Keep existing status on conflict (don't overwrite active/error states)
         },
       })
@@ -222,5 +227,29 @@ export class UserService {
     await db
       .delete(plaidItems)
       .where(and(eq(plaidItems.userId, userId), eq(plaidItems.itemId, itemId)));
+  }
+
+  /**
+   * Offboard a user by removing all their Plaid items.
+   * Calls Plaid /item/remove on each, soft deletes in DB.
+   * DB cascade deletes handle record cleanup when the user row is deleted.
+   */
+  public static async offboardUser(
+    userId: string
+  ): Promise<{ itemsRemoved: number; failures: string[] }> {
+    logger.info('[UserService] Starting user offboarding', { userId });
+
+    const { processed, failures } = await ItemDeletionService.deleteAllUserItems(
+      userId,
+      'user_offboarding'
+    );
+
+    logger.info('[UserService] User offboarding complete', {
+      userId,
+      itemsRemoved: processed,
+      failureCount: failures.length,
+    });
+
+    return { itemsRemoved: processed, failures };
   }
 }

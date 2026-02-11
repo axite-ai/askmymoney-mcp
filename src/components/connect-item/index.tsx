@@ -64,6 +64,21 @@ const features = [
   { icon: Trending, text: "AI-powered spending insights" },
 ];
 
+function InstitutionLogo({ logo, size = 20 }: { logo?: string | null; size?: number }) {
+  if (logo) {
+    return (
+      <img
+        src={logo.startsWith('data:') ? logo : `data:image/png;base64,${logo}`}
+        alt=""
+        width={size}
+        height={size}
+        className="rounded"
+      />
+    );
+  }
+  return <Business style={{ width: size, height: size }} />;
+}
+
 type ActionType = 'error' | 'expiring' | 'new_accounts';
 
 const ACTION_TYPE_COLORS: Record<ActionType, 'danger' | 'warning' | 'info'> = {
@@ -104,31 +119,16 @@ export default function ConnectItem() {
     const authNonce = toolMetadata?.authNonce;
     const baseUrl = toolMetadata?.baseUrl || window.location.origin;
 
-    console.log("[ConnectItem Widget] Opening /connect-bank", {
-      hasNonce: !!authNonce,
-      itemId,
-      mode,
-    });
-
     if (!authNonce) {
-      console.error("[ConnectItem Widget] No auth nonce in props");
       setErrorMessage("Authentication token not available. Please try again.");
       return;
     }
 
-    let connectUrl = `${baseUrl}/connect-bank?nonce=${encodeURIComponent(authNonce)}`;
+    const params = new URLSearchParams({ nonce: authNonce });
+    if (itemId) params.set("itemId", itemId);
+    if (mode) params.set("mode", mode);
 
-    // If itemId provided, add it for update mode
-    if (itemId) {
-      connectUrl += `&itemId=${encodeURIComponent(itemId)}`;
-    }
-
-    // If mode provided (e.g., 'new_accounts'), pass it through
-    if (mode) {
-      connectUrl += `&mode=${encodeURIComponent(mode)}`;
-    }
-
-    openExternal(connectUrl);
+    openExternal(`${baseUrl}/connect-bank?${params.toString()}`);
   };
 
   // Optimistically dismiss new accounts prompt in widget
@@ -255,7 +255,7 @@ export default function ConnectItem() {
     }
   };
 
-  // Render minimal inline version (400px height optimization)
+  // Render compact inline version with account list
   if (!isFullscreen) {
     return (
       <div
@@ -275,29 +275,75 @@ export default function ConnectItem() {
         </Button>
 
         {/* Compact Header */}
-        <div className="flex flex-col items-center text-center mb-8 mt-4">
-          <div className="p-4 rounded-2xl bg-surface-secondary text-secondary mb-4">
-            <CreditCard className="h-8 w-8" />
-          </div>
-          <h2 className="heading-lg mb-2">Manage Accounts</h2>
-          <p className="text-secondary text-md max-w-xs">
+        <div className="mb-4">
+          <h2 className="heading-lg mb-1">Manage Accounts</h2>
+          <p className="text-secondary text-sm">
             {status?.items && status.items.length > 0
               ? `${status.planLimits.current} of ${status.planLimits.maxFormatted} accounts connected`
               : "Connect your first financial account"}
           </p>
         </div>
 
+        {/* Compact Item List */}
+        {status?.items && status.items.length > 0 ? (
+          <div className="flex-1 overflow-y-auto space-y-2 mb-4">
+            {status.items.map((item) => (
+              <div
+                key={item.id}
+                className="p-3 rounded-lg border border-subtle bg-surface flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="p-1.5 rounded-lg bg-surface-secondary text-secondary shrink-0">
+                    <InstitutionLogo logo={item.institutionLogo} size={20} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-sm truncate">{item.institutionName || "Financial Institution"}</p>
+                      {getStatusBadge(item)}
+                    </div>
+                    <p className="text-xs text-secondary">
+                      {item.accountCount} {item.accountCount === 1 ? "account" : "accounts"}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  color="danger"
+                  size="sm"
+                  onClick={() => handleOpenConnectPage(item.id, 'delete')}
+                  className="shrink-0 ml-2"
+                >
+                  <Trash className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <CreditCard className="h-8 w-8 mx-auto mb-2 text-secondary opacity-50" />
+              <p className="text-sm text-secondary">No accounts connected yet</p>
+            </div>
+          </div>
+        )}
+
         {/* Primary Action */}
         <div className="mt-auto">
-          <Button
-            color="primary"
-            size="xl"
-            onClick={() => handleOpenConnectPage()}
-            className="w-full"
-          >
-            <Plus className="mr-2" />
-            {status?.items && status.items.length > 0 ? "Connect Account" : "Connect First Account"}
-          </Button>
+          {status?.canConnect ? (
+            <Button
+              color="primary"
+              size="lg"
+              onClick={() => handleOpenConnectPage()}
+              className="w-full"
+            >
+              <Plus className="mr-2" />
+              {status?.items && status.items.length > 0 ? "Connect Account" : "Connect First Account"}
+            </Button>
+          ) : (
+            <p className="text-xs text-center text-warning">
+              Account limit reached ({status?.planLimits.current}/{status?.planLimits.maxFormatted})
+            </p>
+          )}
         </div>
       </div>
     );
@@ -327,15 +373,6 @@ export default function ConnectItem() {
           </div>
         </div>
 
-        <Button
-          variant="ghost"
-          color="secondary"
-          size="sm"
-          onClick={() => window.close()}
-          className="shrink-0"
-        >
-          Return to ChatGPT
-        </Button>
       </div>
 
       {/* Error Messages */}
@@ -372,7 +409,7 @@ export default function ConnectItem() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center flex-1 gap-3">
                         <div className="p-2 rounded-lg bg-surface-secondary text-secondary">
-                          <Business className="w-5 h-5" />
+                          <InstitutionLogo logo={item.institutionLogo} size={20} />
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
@@ -422,7 +459,7 @@ export default function ConnectItem() {
                           variant="ghost"
                           color="danger"
                           size="sm"
-                          onClick={() => handleOpenConnectPage()}
+                          onClick={() => handleOpenConnectPage(item.id, 'delete')}
                           className="shrink-0"
                         >
                           <Trash className="w-5 h-5" />

@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import { user, passkey, plaidItems } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { hasActiveSubscription, getEffectivePlan } from '@/lib/utils/subscription-helpers';
-import { createLinkToken, exchangePublicToken, plaidClient } from '@/lib/services/plaid-service';
+import { createLinkToken, exchangePublicToken, getInstitutionLogo, plaidClient } from '@/lib/services/plaid-service';
 import { UserService, type PlaidItem } from '@/lib/services/user-service';
 import { ItemDeletionService } from '@/lib/services/item-deletion-service';
 import { getMaxAccountsForPlan, formatAccountLimit } from '@/lib/utils/plan-limits';
@@ -210,14 +210,19 @@ export const exchangePlaidPublicToken = async (
     // Exchange public token for access token
     const { accessToken, itemId } = await exchangePublicToken(publicToken);
 
-    // Save the Plaid item to database with status 'pending'
-    // Webhook ITEM_READY will update status to 'active'
+    // Fetch institution logo (non-blocking, falls back to null)
+    const institutionLogo = institutionId
+      ? await getInstitutionLogo(institutionId)
+      : null;
+
+    // Save the Plaid item to database with status 'active'
     await UserService.savePlaidItem(
       userId,
       itemId,
       accessToken,
       institutionId || undefined,
-      institutionName || undefined
+      institutionName || undefined,
+      institutionLogo
     );
 
     // CRITICAL: Call /transactions/sync immediately (even if no data yet)
@@ -379,6 +384,7 @@ export const getConnectedItems = async (authNonce?: string) => {
         itemId: item.itemId,
         institutionId: item.institutionId,
         institutionName: item.institutionName,
+        institutionLogo: item.institutionLogo,
         status: item.status,
         errorCode: item.errorCode,
         errorMessage: item.errorMessage,

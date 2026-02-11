@@ -38,6 +38,7 @@ interface ConnectedItem {
   itemId: string;
   institutionId: string | null;
   institutionName: string | null;
+  institutionLogo?: string | null;
   status: string | null;
   errorCode: string | null;
   errorMessage: string | null;
@@ -47,12 +48,40 @@ interface ConnectedItem {
   accountCount?: number;
 }
 
+interface DeletionInfo {
+  canDelete: boolean;
+  daysUntilNext?: number;
+}
+
+interface PlanInfo {
+  current: number;
+  max: number;
+  maxFormatted: string;
+  plan: string;
+  subscriptionsEnabled?: boolean;
+}
+
 const features = [
   { icon: Business, text: "Banks, credit cards, investments & more" },
   { icon: ShieldCheck, text: "Bank-level encryption & security" },
   { icon: Flash, text: "Real-time balance updates" },
   { icon: Trending, text: "AI-powered spending insights" },
 ];
+
+function InstitutionLogo({ logo, size = 20 }: { logo?: string | null; size?: number }) {
+  if (logo) {
+    return (
+      <img
+        src={logo.startsWith('data:') ? logo : `data:image/png;base64,${logo}`}
+        alt=""
+        width={size}
+        height={size}
+        className="rounded"
+      />
+    );
+  }
+  return <Business style={{ width: size, height: size }} />;
+}
 
 type ActionType = 'error' | 'expiring' | 'new_accounts';
 
@@ -76,15 +105,48 @@ function formatAccountSummary(accountCount: number | undefined, createdAt: strin
   return `${countPart}${datePart}`;
 }
 
+/**
+ * Reusable full-page centered status screen used by delete mode and update mode.
+ */
+function StatusPage({
+  pageBackground,
+  icon,
+  iconBg,
+  title,
+  description,
+  children,
+}: {
+  pageBackground: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  title: string;
+  description: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className={pageBackground}>
+      <div className="max-w-md w-full text-center">
+        <div className={cn("mb-6 p-4 rounded-full inline-flex", iconBg)}>
+          {icon}
+        </div>
+        <h1 className="text-2xl font-bold mb-3 text-default">{title}</h1>
+        <p className="text-secondary mb-8">{description}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function ConnectBankClient() {
   const searchParams = useSearchParams();
   const theme = useTheme();
   const isDark = theme === 'dark';
 
-  // Update mode detection
+  // Mode detection from URL params
   const itemIdParam = searchParams.get('itemId');
-  const modeParam = searchParams.get('mode') as ActionType | null;
-  const isUpdateMode = !!itemIdParam;
+  const modeParam = searchParams.get('mode');
+  const isDeleteMode = modeParam === 'delete' && itemIdParam !== null;
+  const isUpdateMode = itemIdParam !== null && !isDeleteMode;
 
   const pageBackground = cn(
     "min-h-screen flex items-center justify-center p-4",
@@ -99,8 +161,8 @@ export default function ConnectBankClient() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
   const [connectedItems, setConnectedItems] = useState<ConnectedItem[]>([]);
-  const [deletionInfo, setDeletionInfo] = useState<any>(null);
-  const [planInfo, setPlanInfo] = useState<any>(null);
+  const [deletionInfo, setDeletionInfo] = useState<DeletionInfo | null>(null);
+  const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [itemsLoaded, setItemsLoaded] = useState(false);
@@ -141,6 +203,9 @@ export default function ConnectBankClient() {
   useEffect(() => {
     connectedItemsRef.current = connectedItems.length;
   }, [connectedItems]);
+
+  // Delete mode ref (no auto-trigger; user confirms via inline UI)
+  const deleteTriggered = useRef(false);
 
   // Initialize link token (only when user clicks connect, not on page load)
   const initializeLinkToken = async () => {
@@ -312,8 +377,8 @@ export default function ConnectBankClient() {
     }
   };
 
-  const handleDeleteItem = async (itemId: string, institutionName: string | null) => {
-    if (!confirm(`Are you sure you want to disconnect ${institutionName || 'this account'}?`)) {
+  const handleDeleteItem = async (itemId: string, institutionName: string | null, skipConfirm = false) => {
+    if (!skipConfirm && !confirm(`Are you sure you want to disconnect ${institutionName || 'this account'}?`)) {
       return;
     }
 
@@ -433,6 +498,166 @@ export default function ConnectBankClient() {
     }
   };
 
+  // === Delete Mode: Focused single-column layout (mirrors update mode) ===
+  if (isDeleteMode) {
+    const deleteTargetItem = connectedItems.find(i => i.id === itemIdParam);
+
+    // Loading state
+    if (!itemsLoaded) {
+      return (
+        <div className={pageBackground}>
+          <div className="text-center">
+            <div className="mb-4 mx-auto w-8 h-8 border-2 border-t-transparent rounded-full animate-spin border-secondary" />
+            <p className="text-secondary text-sm">Loading account details...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Success state after deletion
+    if (successMessage) {
+      return (
+        <StatusPage
+          pageBackground={pageBackground}
+          icon={<CheckCircle className="w-12 h-12 text-success" />}
+          iconBg="bg-success-soft"
+          title="Account Disconnected"
+          description={successMessage}
+        >
+          <Button onClick={() => window.close()} color="success" size="xl" block>
+            Return to ChatGPT
+          </Button>
+        </StatusPage>
+      );
+    }
+
+    // Error state
+    if (pageData.error) {
+      return (
+        <StatusPage
+          pageBackground={pageBackground}
+          icon={<ErrorIcon className="w-12 h-12 text-danger" />}
+          iconBg="bg-danger-soft"
+          title="Disconnection Failed"
+          description={pageData.error}
+        >
+          <div className="space-y-3">
+            <Button
+              onClick={() => {
+                setPageData(prev => ({ ...prev, error: null }));
+                deleteTriggered.current = false;
+              }}
+              color="danger"
+              size="xl"
+              block
+            >
+              Try Again
+            </Button>
+            <Button onClick={() => window.close()} variant="ghost" color="secondary" size="lg" block>
+              Return to ChatGPT
+            </Button>
+          </div>
+        </StatusPage>
+      );
+    }
+
+    // Item not found
+    if (!deleteTargetItem) {
+      return (
+        <StatusPage
+          pageBackground={pageBackground}
+          icon={<Business className="w-12 h-12 text-tertiary" />}
+          iconBg="bg-surface-secondary"
+          title="Account Not Found"
+          description="This account could not be found. It may have already been disconnected."
+        >
+          <Button onClick={() => window.close()} variant="ghost" color="secondary" size="xl" block>
+            Return to ChatGPT
+          </Button>
+        </StatusPage>
+      );
+    }
+
+    // Inline confirmation (matches update mode layout: top bar + centered card + item detail)
+    const institutionName = deleteTargetItem.institutionName || 'Financial Institution';
+    return (
+      <div className={cn("min-h-screen flex flex-col p-4", isDark ? "bg-linear-to-br from-gray-900 to-gray-800" : "bg-linear-to-br from-gray-50 to-gray-100")}>
+        {/* Top bar */}
+        <div className="flex justify-end mb-8">
+          <Button
+            variant="ghost"
+            color="secondary"
+            onClick={() => window.close()}
+          >
+            Return to ChatGPT
+          </Button>
+        </div>
+
+        {/* Centered content */}
+        <div className="flex-1 flex items-center justify-center">
+          <div className="max-w-md w-full">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className="mb-4 p-4 rounded-full inline-flex bg-danger-soft">
+                <Trash className={cn("w-10 h-10 text-danger", deletingItemId && "animate-pulse")} />
+              </div>
+              <h1 className="text-2xl font-bold mb-2 text-default">Disconnect Account</h1>
+              <Badge color="danger">Permanent Action</Badge>
+            </div>
+
+            {/* Item card */}
+            <div className="p-4 rounded-lg border mb-6 bg-surface border-subtle">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-surface-secondary text-secondary">
+                  <InstitutionLogo logo={deleteTargetItem.institutionLogo} size={20} />
+                </div>
+                <div>
+                  <p className="font-medium text-default">{institutionName}</p>
+                  <p className="text-xs text-secondary">
+                    {formatAccountSummary(deleteTargetItem.accountCount, deleteTargetItem.createdAt)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Explanation */}
+            <p className="text-secondary text-sm mb-8 text-center">
+              This will revoke data access from {institutionName} and stop syncing transactions. Your existing transaction history will remain available.
+            </p>
+
+            {/* Action buttons */}
+            <Button
+              onClick={() => handleDeleteItem(deleteTargetItem.id, deleteTargetItem.institutionName, true)}
+              disabled={!!deletingItemId}
+              color="danger"
+              size="xl"
+              block
+            >
+              {deletingItemId ? 'Disconnecting...' : `Disconnect ${institutionName}`}
+            </Button>
+
+            <Button
+              onClick={() => window.close()}
+              disabled={!!deletingItemId}
+              variant="ghost"
+              color="secondary"
+              size="lg"
+              block
+              className="mt-3"
+            >
+              Cancel
+            </Button>
+
+            {/* Footer hint */}
+            <p className="text-xs text-tertiary text-center mt-4">
+              You can reconnect this account at any time through ChatGPT.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // === Update Mode: Focused single-column layout ===
   if (isUpdateMode) {
     const updateTargetItem = connectedItems.find(i => i.id === itemIdParam);
@@ -503,111 +728,81 @@ export default function ConnectBankClient() {
     // Update mode: Success state (after Plaid Link completes)
     if (isSuccess && successMessage) {
       return (
-        <div className={pageBackground}>
-          <div className="max-w-md w-full text-center">
-            <div className="mb-6 p-4 rounded-full inline-flex bg-success-soft">
-              <CheckCircle className="w-12 h-12 text-success" />
-            </div>
-            <h1 className="text-2xl font-bold mb-3 text-default">All Done</h1>
-            <p className="text-secondary mb-8">{successMessage}</p>
-            <Button
-              onClick={() => window.close()}
-              color="success"
-              size="xl"
-              block
-            >
-              Return to ChatGPT
-            </Button>
-          </div>
-        </div>
+        <StatusPage
+          pageBackground={pageBackground}
+          icon={<CheckCircle className="w-12 h-12 text-success" />}
+          iconBg="bg-success-soft"
+          title="All Done"
+          description={successMessage}
+        >
+          <Button onClick={() => window.close()} color="success" size="xl" block>
+            Return to ChatGPT
+          </Button>
+        </StatusPage>
       );
     }
 
     // Update mode: Error state (after Plaid Link exits with error)
     if (updateLinkError) {
       return (
-        <div className={pageBackground}>
-          <div className="max-w-md w-full text-center">
-            <div className="mb-6 p-4 rounded-full inline-flex bg-danger-soft">
-              <ErrorIcon className="w-12 h-12 text-danger" />
-            </div>
-            <h1 className="text-2xl font-bold mb-3 text-default">Connection Failed</h1>
-            <p className="text-secondary mb-8">{updateLinkError}</p>
-            <div className="space-y-3">
-              <Button
-                onClick={() => {
-                  setUpdateLinkError(null);
-                  initializeLinkToken();
-                }}
-                color="danger"
-                size="xl"
-                block
-              >
-                Try Again
-              </Button>
-              <Button
-                onClick={() => window.close()}
-                variant="ghost"
-                color="secondary"
-                size="lg"
-                block
-              >
-                Return to ChatGPT
-              </Button>
-            </div>
+        <StatusPage
+          pageBackground={pageBackground}
+          icon={<ErrorIcon className="w-12 h-12 text-danger" />}
+          iconBg="bg-danger-soft"
+          title="Connection Failed"
+          description={updateLinkError}
+        >
+          <div className="space-y-3">
+            <Button
+              onClick={() => {
+                setUpdateLinkError(null);
+                initializeLinkToken();
+              }}
+              color="danger"
+              size="xl"
+              block
+            >
+              Try Again
+            </Button>
+            <Button onClick={() => window.close()} variant="ghost" color="secondary" size="lg" block>
+              Return to ChatGPT
+            </Button>
           </div>
-        </div>
+        </StatusPage>
       );
     }
 
     // Update mode: Already fixed
     if (updateTargetItem && updateTargetItem.status === 'active' && !targetAction) {
       return (
-        <div className={pageBackground}>
-          <div className="max-w-md w-full text-center">
-            <div className="mb-6 p-4 rounded-full inline-flex bg-success-soft">
-              <CheckCircle className="w-12 h-12 text-success" />
-            </div>
-            <h1 className="text-2xl font-bold mb-3 text-default">Already Working</h1>
-            <p className="text-secondary mb-8">
-              Your {updateTargetItem.institutionName || 'bank'} connection is working correctly. No action is needed.
-            </p>
-            <Button
-              onClick={() => window.close()}
-              color="success"
-              size="xl"
-              block
-            >
-              Return to ChatGPT
-            </Button>
-          </div>
-        </div>
+        <StatusPage
+          pageBackground={pageBackground}
+          icon={<CheckCircle className="w-12 h-12 text-success" />}
+          iconBg="bg-success-soft"
+          title="Already Working"
+          description={`Your ${updateTargetItem.institutionName || 'bank'} connection is working correctly. No action is needed.`}
+        >
+          <Button onClick={() => window.close()} color="success" size="xl" block>
+            Return to ChatGPT
+          </Button>
+        </StatusPage>
       );
     }
 
     // Update mode: Item not found
     if (!updateTargetItem) {
       return (
-        <div className={pageBackground}>
-          <div className="max-w-md w-full text-center">
-            <div className="mb-6 p-4 rounded-full inline-flex bg-surface-secondary">
-              <Business className="w-12 h-12 text-tertiary" />
-            </div>
-            <h1 className="text-2xl font-bold mb-3 text-default">Connection Not Found</h1>
-            <p className="text-secondary mb-8">
-              This bank connection could not be found. It may have been removed or is no longer available.
-            </p>
-            <Button
-              onClick={() => window.close()}
-              variant="ghost"
-              color="secondary"
-              size="xl"
-              block
-            >
-              Return to ChatGPT
-            </Button>
-          </div>
-        </div>
+        <StatusPage
+          pageBackground={pageBackground}
+          icon={<Business className="w-12 h-12 text-tertiary" />}
+          iconBg="bg-surface-secondary"
+          title="Connection Not Found"
+          description="This bank connection could not be found. It may have been removed or is no longer available."
+        >
+          <Button onClick={() => window.close()} variant="ghost" color="secondary" size="xl" block>
+            Return to ChatGPT
+          </Button>
+        </StatusPage>
       );
     }
 
@@ -641,8 +836,8 @@ export default function ConnectBankClient() {
             {/* Item card */}
             <div className="p-4 rounded-lg border mb-6 bg-surface border-subtle">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-surface-secondary">
-                  <Business className="w-5 h-5 text-secondary" />
+                <div className="p-2 rounded-lg bg-surface-secondary text-secondary">
+                  <InstitutionLogo logo={updateTargetItem.institutionLogo} size={20} />
                 </div>
                 <div>
                   <p className="font-medium text-default">{updateTargetItem.institutionName || 'Financial Institution'}</p>
@@ -870,7 +1065,7 @@ export default function ConnectBankClient() {
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <Business className="w-4 h-4 text-secondary" />
+                            <span className="text-secondary"><InstitutionLogo logo={item.institutionLogo} size={16} /></span>
                             <p className="font-medium text-default">{item.institutionName || 'Financial Institution'}</p>
                             {getStatusBadge(item)}
                           </div>
@@ -915,7 +1110,7 @@ export default function ConnectBankClient() {
                             size="sm"
                             color="danger"
                             onClick={() => handleDeleteItem(item.id, item.institutionName)}
-                            disabled={deletingItemId === item.id || (deletionInfo && !deletionInfo.canDelete)}
+                            disabled={deletingItemId === item.id || (deletionInfo !== null && !deletionInfo.canDelete)}
                             title={
                               deletionInfo && !deletionInfo.canDelete
                                 ? `Next deletion available in ${deletionInfo.daysUntilNext} days`

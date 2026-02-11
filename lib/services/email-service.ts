@@ -301,6 +301,48 @@ export const EmailService = {
   },
 
   /**
+   * Send bank disconnection confirmation email
+   */
+  async sendBankDisconnectionConfirmation(
+    email: string,
+    userName: string,
+    institutionName: string
+  ) {
+    const subject = "Bank Account Disconnected";
+
+    const body = `
+      <h2>Hi ${escapeHtml(userName)},</h2>
+      <div class="badge" style="background: #6b7280;">Disconnected</div>
+      <p style="margin-top: 16px;"><strong>${escapeHtml(institutionName)}</strong> has been disconnected from your AskMyMoney account.</p>
+
+      <div class="info-box">
+        <h3 style="margin-top: 0;">What this means:</h3>
+        <ul>
+          <li>Data access from ${escapeHtml(institutionName)} has been revoked</li>
+          <li>No further transactions will be synced from this account</li>
+          <li>Your existing transaction history remains available</li>
+        </ul>
+      </div>
+
+      <p>If this was a mistake, you can reconnect the account at any time through ChatGPT.</p>
+      ${SIGN_OFF}`;
+
+    const extraStyles = `
+    .badge { display: inline-block; padding: 6px 14px; border-radius: 20px; color: white; font-size: 14px; font-weight: 600; }
+    .info-box { background: #f3f4f6; padding: 20px; border-radius: 6px; margin: 20px 0; }
+    .info-box li { margin: 10px 0; }`;
+
+    const html = emailTemplate(
+      "Account Disconnected",
+      body,
+      "You're receiving this email because a bank account was disconnected from AskMyMoney.",
+      extraStyles
+    );
+
+    return this.sendEmail({ to: email, subject, html });
+  },
+
+  /**
    * Send a positive notification when a bank login has been repaired externally
    */
   async sendLoginRepairedEmail(

@@ -344,6 +344,7 @@ export const plaidItems = pgTable(
 
     institutionId: text("institution_id"),
     institutionName: text("institution_name"),
+    institutionLogo: text("institution_logo"),
 
     status: PlaidItemStatus("status").default("active"),
 
