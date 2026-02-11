@@ -25,8 +25,8 @@
   },
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --turbopack && pnpm db:push",
-    "start": "next start -H 0.0.0.0",
+    "build": "next build --turbopack",
+    "start": "pnpm db:push && next start -H 0.0.0.0",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
