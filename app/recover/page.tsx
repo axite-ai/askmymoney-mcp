@@ -82,11 +82,11 @@ function RecoverContent() {
         newUserCallbackURL: "/", // New users shouldn't be here
         fetchOptions: {
           // Force fresh login (no silent SSO)
-          onRequest: (options: { body: unknown }) => {
-            if (options.body instanceof URLSearchParams) {
-              options.body.append("prompt", "login");
+          onRequest: (ctx: any) => {
+            if (ctx.body instanceof URLSearchParams) {
+              ctx.body.append("prompt", "login");
             }
-            return options;
+            return ctx;
           },
         },
       });
