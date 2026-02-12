@@ -783,8 +783,8 @@ const handler = withMcpAuth(auth, async (req, session) => {
     }
   );
 
-  // Check Account Health
-  server.registerTool(
+  // Check Account Health (disabled for launch)
+  /* server.registerTool(
     "askmymoney_check_account_health",
     {
       title: "Check Account Health",
@@ -859,7 +859,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
         );
       }
     }
-  );
+  ); */
 
   // Get Investment Portfolio (Enhanced)
   server.registerTool(
@@ -1610,8 +1610,8 @@ const handler = withMcpAuth(auth, async (req, session) => {
     }
   );
 
-  // Business Cash Flow Analysis (NEW)
-  server.registerTool(
+  // Business Cash Flow Analysis (disabled for launch)
+  /* server.registerTool(
     "askmymoney_business_cash_flow",
     {
       title: "Business Cash Flow Analysis",
@@ -1732,7 +1732,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
         );
       }
     }
-  );
+  ); */
 
   // Categorize Expenses (NEW)
   server.registerTool(
@@ -1861,8 +1861,8 @@ const handler = withMcpAuth(auth, async (req, session) => {
     }
   );
 
-  // Evaluate Payment Risk (NEW)
-  server.registerTool(
+  // Evaluate Payment Risk (disabled for launch)
+  /* server.registerTool(
     "askmymoney_evaluate_payment_risk",
     {
       title: "ACH Payment Risk Assessment",
@@ -1976,14 +1976,14 @@ const handler = withMcpAuth(auth, async (req, session) => {
         );
       }
     }
-  );
+  ); */
 
   // ============================================================================
-  // FREE TIER TOOLS (No Authentication Required)
+  // FREE TIER TOOLS (disabled for launch)
   // ============================================================================
 
-  // Get Financial Tips
-  server.registerTool(
+  // Get Financial Tips (disabled for launch)
+  /* server.registerTool(
     "askmymoney_get_financial_tips",
     {
       title: "Get Financial Tips",
@@ -2157,10 +2157,10 @@ const handler = withMcpAuth(auth, async (req, session) => {
         output
       );
     }
-  );
+  ); */
 
-  // Calculate Budget (50/30/20 Rule)
-  server.registerTool(
+  // Calculate Budget (disabled for launch)
+  /* server.registerTool(
     "askmymoney_calculate_budget",
     {
       title: "Calculate Budget",
@@ -2231,7 +2231,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
         output
       );
     }
-  );
+  ); */
 
 })(req);
 });
