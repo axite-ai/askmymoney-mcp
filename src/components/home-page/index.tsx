@@ -92,9 +92,17 @@ export default function Home() {
           </div>
         )}
         <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
+          className="hidden dark:block"
+          src="/logo-dark.svg"
+          alt="AskMyMoney logo"
+          width={180}
+          height={38}
+          priority
+        />
+        <Image
+          className="block dark:hidden"
+          src="/logo.svg"
+          alt="AskMyMoney logo"
           width={180}
           height={38}
           priority
