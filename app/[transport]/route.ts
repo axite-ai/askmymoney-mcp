@@ -17,7 +17,7 @@ import {
   detectSpendingAnomalies,
   mapToTaxCategory,
 } from "@/lib/services/plaid-service";
-import { getConnectItemStatus } from "@/app/widgets/connect-item/actions";
+import { getConnectItemStatus } from "@/app/(app)/widgets/connect-item/actions";
 import { db } from "@/lib/db";
 import { plaidTransactions, plaidAccounts, user } from "@/lib/db/schema";
 import { and, gte, lte, eq as drizzleEq, inArray, desc, count } from 'drizzle-orm';

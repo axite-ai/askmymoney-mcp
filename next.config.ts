@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import { baseURL } from "./baseUrl";
 
 const nextConfig: NextConfig = {
-  assetPrefix: baseURL,
+  assetPrefix: process.env.NODE_ENV === "production" ? baseURL : undefined,
   // Allow cross-origin requests from ChatGPT sandbox for Server Actions
   experimental: {
     serverActions: {

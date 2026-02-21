@@ -1,16 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
-import { baseURL } from "@/baseUrl";
-import { AppsSDKUIProvider } from "@openai/apps-sdk-ui/components/AppsSDKUIProvider";
-import { NextChatSDKBootstrap } from "@/src/components/shared/next-chat-sdk-bootstrap";
-import Link from "next/link";
-
-declare global {
-  interface AppsSDKUIConfig {
-    LinkComponent: typeof Link;
-  }
-}
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,9 +12,17 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const instrumentSerif = Instrument_Serif({
+  weight: "400",
+  style: ["normal", "italic"],
+  subsets: ["latin"],
+  variable: "--font-display",
+});
+
 export const metadata: Metadata = {
-  title: "AskMyMoney",
-  description: "Track and understand your finances with AI",
+  title: "AskMyMoney — Track and Understand Your Finances",
+  description:
+    "AskMyMoney connects your bank accounts to ChatGPT. Ask about balances, spending, and financial health — get instant, accurate answers.",
   icons: {
     icon: [
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
@@ -42,18 +40,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <NextChatSDKBootstrap baseUrl={baseURL} />
-      </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} antialiased`}
       >
-        <AppsSDKUIProvider linkComponent={Link}>
-          {children}
-        </AppsSDKUIProvider>
+        {children}
       </body>
     </html>
   );
 }
-
-

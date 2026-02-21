@@ -12,7 +12,7 @@ import { Alert } from "@openai/apps-sdk-ui/components/Alert";
 import { RadioGroup } from "@openai/apps-sdk-ui/components/RadioGroup";
 import { AnimateLayout } from "@openai/apps-sdk-ui/components/Transition";
 import { useToolInfo, useDisplayMode, useOpenAiGlobal, useOpenExternal } from "@/src/mcp-ui-hooks";
-import { upgradeSubscription } from "@/app/widgets/subscription-required/actions";
+import { upgradeSubscription } from "@/app/(app)/widgets/subscription-required/actions";
 import { cn } from "@/lib/utils/cn";
 
 const PLANS = [

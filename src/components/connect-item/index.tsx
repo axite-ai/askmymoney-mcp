@@ -32,7 +32,7 @@ import { WidgetLoadingSkeleton } from "@/src/components/shared/widget-loading-sk
 import {
   type ConnectedItem,
   type ConnectItemStatus,
-} from "@/app/widgets/connect-item/actions";
+} from "@/app/(app)/widgets/connect-item/actions";
 
 // Data from structuredContent (visible to model)
 interface ConnectItemContent {

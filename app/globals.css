@@ -1,29 +1,33 @@
-@import "tailwindcss";
-@import "@openai/apps-sdk-ui/css";
-/* Required for Tailwind to find class references in Apps SDK UI components. */
-@source "../node_modules/@openai/apps-sdk-ui";
-
-/* -------------------------------------- */
-/* Root Variables */
-/* -------------------------------------- */
-
-/*
-  Apps SDK UI provides a comprehensive set of CSS variables for theming.
-  We rely on the SDK's tokens for consistency.
-
-  See: https://openai.github.io/apps-sdk-ui/?path=/docs/foundations-design-tokens--docs
-*/
-
-/* Tailwind v4 theme tokens - mapping to Apps SDK UI tokens where possible */
-@theme inline {
-  --color-background: var(--color-surface);
-  --color-foreground: var(--color-text);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+/* Display font utility (Instrument Serif via next/font) */
+.font-display {
+  font-family: var(--font-display), serif;
 }
 
-body {
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-family: var(--font-sans);
+/* ---- Shared animations ---- */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Scroll-triggered: hidden by default, animate when .in-view */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.in-view {
+  opacity: 1;
+  transform: translateY(0);
 }
