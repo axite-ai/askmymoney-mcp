@@ -259,8 +259,8 @@ export default function ConnectItem() {
   if (!isFullscreen) {
     return (
       <div
-        className="antialiased w-full relative flex flex-col h-full min-h-[400px] p-6 text-default bg-transparent"
-        style={{ height: "400px" }}
+        className="antialiased w-full relative flex flex-col h-full min-h-[400px] p-4 sm:p-6 text-default bg-transparent"
+        style={{ maxHeight: "400px" }}
       >
         {/* Fullscreen toggle */}
         <Button
@@ -553,7 +553,7 @@ export default function ConnectItem() {
           <p className="font-semibold mb-4 text-default">
             What you'll get:
           </p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {features.map((feature, index) => (
               <div key={index} className="flex items-start gap-3">
                 <div className="p-1 rounded bg-success-surface shrink-0 mt-0.5">

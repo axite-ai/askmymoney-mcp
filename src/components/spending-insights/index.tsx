@@ -371,7 +371,7 @@ export default function SpendingInsights() {
         {/* Layout: Chart + Categories */}
         <div className={cn("flex gap-4", isFullscreen ? "flex-col" : "flex-row items-center")}>
           {/* Donut Chart */}
-          <div className={cn("flex justify-center py-2 shrink-0", !isFullscreen && "w-[45%]")}>
+          <div className={cn("flex justify-center py-2 shrink-0", !isFullscreen && "max-w-[45%]")}>
             <div className={cn("relative", !isFullscreen && "scale-75 origin-center")}>
               <DonutChart
                 categories={categoriesWithMetadata}
