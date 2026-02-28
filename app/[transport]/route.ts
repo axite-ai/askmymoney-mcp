@@ -145,8 +145,10 @@ const handler = withMcpAuth(auth, async (req, session) => {
       { id: 'business-cashflow', title: 'Business Cash Flow Widget', description: 'Runway calculator and burn rate analysis for businesses', path: '/widgets/business-cashflow' },
       { id: 'expense-categorizer', title: 'Expense Categorizer Widget', description: 'Smart expense categorization with tax category mapping', path: '/widgets/expense-categorizer' },
       { id: 'plaid-required', title: 'Connect Bank Account', description: 'Prompts user to connect their bank account via Plaid', path: '/widgets/plaid-required' },
-      { id: 'subscription-required', title: 'Choose Subscription Plan', description: 'Select and subscribe to a plan to unlock features', path: '/widgets/subscription-required' },
-      { id: 'manage-subscription', title: 'Manage Subscription', description: 'Update or cancel your subscription', path: '/widgets/manage-subscription' },
+      ...(FEATURES.SUBSCRIPTIONS ? [
+        { id: 'subscription-required', title: 'Choose Subscription Plan', description: 'Select and subscribe to a plan to unlock features', path: '/widgets/subscription-required' },
+        { id: 'manage-subscription', title: 'Manage Subscription', description: 'Update or cancel your subscription', path: '/widgets/manage-subscription' },
+      ] : []),
       { id: 'connect-item', title: 'Manage Financial Accounts', description: 'Connect or manage your linked financial accounts', path: '/widgets/connect-item' },
     ];
 
@@ -180,8 +182,10 @@ const handler = withMcpAuth(auth, async (req, session) => {
                   connect_domains: [
                     baseURL,
                     baseURL.replace(/^http/, 'ws'), // Allow HMR WebSockets in dev
-                    'https://checkout.stripe.com', // Stripe checkout for subscriptions
-                    'https://billing.stripe.com', // Stripe billing portal
+                    ...(FEATURES.SUBSCRIPTIONS ? [
+                      'https://checkout.stripe.com', // Stripe checkout for subscriptions
+                      'https://billing.stripe.com', // Stripe billing portal
+                    ] : []),
                   ],
                   resource_domains: [
                     baseURL,
@@ -1186,7 +1190,8 @@ const handler = withMcpAuth(auth, async (req, session) => {
     }
   );
 
-    // Manage Subscription
+    // Manage Subscription (only registered when subscriptions are enabled)
+    if (FEATURES.SUBSCRIPTIONS) {
     server.registerTool(
       "askmymoney_manage_subscription",
       {
@@ -1287,6 +1292,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
         }
       }
     );
+    } // end FEATURES.SUBSCRIPTIONS gate
 
     // ============================================================================
     // CONNECT ITEM (Account Management)
@@ -1295,7 +1301,7 @@ const handler = withMcpAuth(auth, async (req, session) => {
       "askmymoney_connect_item",
       {
         title: "Manage Financial Accounts",
-        description: "Connect new financial accounts (banks, credit cards, investments, loans) or manage existing connections. Always shows your connected accounts to prevent duplicates. Requires authentication and active subscription.",
+        description: "Connect new financial accounts (banks, credit cards, investments, loans) or manage existing connections. Always shows your connected accounts to prevent duplicates. Requires authentication.",
         inputSchema: {},
         _meta: {
           "openai/outputTemplate": "ui://widget/connect-item.html",
