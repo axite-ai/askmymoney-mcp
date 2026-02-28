@@ -15,7 +15,7 @@ import {
 } from "./auth-responses";
 import { auth } from "../auth";
 import { db } from "@/lib/db";
-import { passkey, user as userTable } from "@/lib/db/schema";
+import { passkey } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "@/lib/services/logger-service";
 
@@ -60,9 +60,6 @@ export async function requireAuth(
 ) {
   const { requireSubscription = true, requirePlaid = true, requireSecurity = true, headers } = options;
 
-  // Test account email — skip passkey requirement for OpenAI reviewer access
-  const testAccountEmail = process.env.TEST_ACCOUNT_EMAIL || "test@askmymoney.ai";
-
   console.log(`[requireAuth] Checking auth for ${featureName}:`, {
     hasSession: !!session,
     userId: session?.userId,
@@ -77,17 +74,8 @@ export async function requireAuth(
     return createLoginPromptResponse(featureName);
   }
 
-  // Check if this is the test account — skip passkey requirement
-  let isTestAccount = false;
-  try {
-    const userRecord = await db.select({ email: userTable.email }).from(userTable).where(eq(userTable.id, session.userId)).limit(1);
-    isTestAccount = userRecord[0]?.email === testAccountEmail;
-  } catch {
-    // Fail open for test account check — worst case passkey is still required
-  }
-
-  // Check 2: Security (Passkey) enabled (if required, skip for test account)
-  if (requireSecurity && !isTestAccount) {
+  // Check 2: Security (Passkey) enabled (if required)
+  if (requireSecurity) {
     try {
       // Check Passkeys from database
       const passkeys = await db.select().from(passkey).where(eq(passkey.userId, session.userId)).limit(1);

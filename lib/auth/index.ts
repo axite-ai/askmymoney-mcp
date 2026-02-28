@@ -7,7 +7,7 @@
 
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
-import { mcp, apiKey, jwt, username } from "better-auth/plugins";
+import { mcp, apiKey, jwt } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { stripe } from "@better-auth/stripe";
@@ -164,12 +164,6 @@ export const auth = betterAuth({
   // Application name (used as issuer for TOTP)
   appName: "Axite MCP",
 
-  // Email/password auth (used for test/review accounts)
-  emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: false,
-  },
-
   // Social OAuth providers
   socialProviders: {
     google: {
@@ -190,7 +184,6 @@ export const auth = betterAuth({
   // Plugins
   plugins: [
     passkey(),
-    username(),
     apiKey({
       // Enable API key authentication for server-side operations
       // This allows MCP tools to call auth.api methods without user sessions
