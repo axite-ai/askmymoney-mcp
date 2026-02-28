@@ -47,7 +47,8 @@
     "test:all": "pnpm test:run && pnpm test:e2e",
     "test:watch": "vitest watch",
     "generate:tool": "tsx scripts/generate-tool.ts",
-    "generate:widget": "tsx scripts/generate-widget.ts"
+    "generate:widget": "tsx scripts/generate-widget.ts",
+    "seed:test": "tsx scripts/seed-test-account.ts"
   },
   "dependencies": {
     "@better-auth/core": "^1.4.7",
