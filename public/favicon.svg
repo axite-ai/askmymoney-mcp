@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <!-- AskMyMoney logo centered in square -->
-  <g transform="translate(2, 12) scale(0.0527)">
+  <g transform="translate(0, 21.85) scale(0.05628, 0.05628) translate(-181.383, -570.234)">
     <!-- Red chevron left -->
     <path fill="#dd390d" d="M181.383 867.527 L478.453 570.234 L590.832 682.613 L405.918 867.527 C344.133 929.535 243.395 929.535 181.383 867.527Z"/>
     <!-- Red chevron center-left -->
