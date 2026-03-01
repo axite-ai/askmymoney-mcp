@@ -38,9 +38,18 @@ function LoginContent() {
       }
 
       // Skip onboarding for test accounts — go directly to callback
-      router.push(getFinalRedirect());
-    } catch {
-      setError("Sign in failed. Please check your credentials.");
+      const redirect = getFinalRedirect();
+      // Use window.location for API routes (OAuth flow) since router.push
+      // doesn't work for non-page routes
+      if (redirect.startsWith("/api/")) {
+        window.location.href = redirect;
+      } else {
+        router.push(redirect);
+      }
+      setLoading(false);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(`Sign in failed: ${message}`);
       setLoading(false);
     }
   };
