@@ -28,6 +28,8 @@ export const user = pgTable("user", {
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
   stripeCustomerId: text("stripe_customer_id"),
+  username: text("username").unique(),
+  displayUsername: text("display_username"),
 });
 
 export const session = pgTable(

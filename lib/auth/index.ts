@@ -7,7 +7,7 @@
 
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
-import { mcp, apiKey, jwt } from "better-auth/plugins";
+import { mcp, apiKey, jwt, username } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { stripe } from "@better-auth/stripe";
@@ -173,6 +173,12 @@ export const auth = betterAuth({
     },
   },
 
+  // Email/password auth (used for test account review)
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: false,
+  },
+
   telemetry: {
     debug: process.env.NODE_ENV !== "production",
   },
@@ -183,6 +189,7 @@ export const auth = betterAuth({
 
   // Plugins
   plugins: [
+    username(),
     passkey(),
     apiKey({
       // Enable API key authentication for server-side operations

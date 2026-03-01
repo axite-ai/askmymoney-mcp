@@ -1,12 +1,50 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
 import { signIn } from "@/lib/auth/client";
 
 function LoginContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const callbackUrl = searchParams.get("callbackURL") || "/";
+  const [showTestLogin, setShowTestLogin] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const getFinalRedirect = () => {
+    if (searchParams.has("client_id")) {
+      return `/api/auth/mcp/authorize?${searchParams.toString()}`;
+    }
+    return callbackUrl;
+  };
+
+  const handleTestLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const result = await signIn.username({
+        username,
+        password,
+      });
+
+      if (result.error) {
+        setError(result.error.message || "Invalid credentials");
+        setLoading(false);
+        return;
+      }
+
+      // Skip onboarding for test accounts — go directly to callback
+      router.push(getFinalRedirect());
+    } catch {
+      setError("Sign in failed. Please check your credentials.");
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
@@ -21,14 +59,7 @@ function LoginContent() {
         <div className="mt-8 space-y-4">
           <button
             onClick={() => {
-                // Determine the correct callback URL
-                // If we're in an OAuth flow (have client_id), we must redirect back to the authorize endpoint
-                // with all the original query parameters to complete the handshake.
-                const finalRedirect = searchParams.has("client_id")
-                  ? `/api/auth/mcp/authorize?${searchParams.toString()}`
-                  : callbackUrl; // Fallback to provided callback or home
-
-                // Redirect to onboarding first to ensure passkey setup
+                const finalRedirect = getFinalRedirect();
                 const onboardingURL = `/onboarding?callbackURL=${encodeURIComponent(finalRedirect)}`;
 
                 signIn.social({
@@ -59,6 +90,48 @@ function LoginContent() {
             </svg>
             Continue with Google
           </button>
+
+          {/* Test credentials login - collapsible */}
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setShowTestLogin(!showTestLogin)}
+              className="w-full text-center text-xs text-gray-500 hover:text-gray-400 transition-colors"
+            >
+              {showTestLogin ? "Hide" : "Sign in with test credentials"}
+            </button>
+
+            {showTestLogin && (
+              <form onSubmit={handleTestLogin} className="mt-3 space-y-3">
+                <input
+                  type="text"
+                  placeholder="Username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full rounded-md border border-gray-600 bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-md border border-gray-600 bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  required
+                />
+                {error && (
+                  <p className="text-xs text-red-400">{error}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-md bg-gray-700 px-3 py-2 text-sm font-medium text-white hover:bg-gray-600 transition-colors disabled:opacity-50"
+                >
+                  {loading ? "Signing in..." : "Sign in"}
+                </button>
+              </form>
+            )}
+          </div>
         </div>
       </div>
     </div>

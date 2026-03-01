@@ -3,6 +3,7 @@ import { plaidItems, plaidAccounts, plaidTransactions, plaidLinkSessions } from 
 import { eq, sql, inArray, and, gte, lte, desc } from 'drizzle-orm';
 import { getPlaidClient } from '../config/plaid';
 import { EncryptionService } from './encryption-service';
+import { isTestToken, getTestAccountBalances, getTestInvestmentHoldings, getTestLiabilities, getTestRecurringTransactions } from './test-account-data';
 import { logger } from './logger-service';
 
 // Export Plaid client for use in other services
@@ -226,6 +227,7 @@ export const exchangePublicToken = async (publicToken: string) => {
  * @returns Account balances and details
  */
 export async function getAccountBalances(accessToken: string) {
+  if (isTestToken(accessToken)) return getTestAccountBalances();
   const request: AccountsGetRequest = {
     access_token: accessToken,
   };
@@ -301,6 +303,9 @@ export async function syncTransactionsForItem(itemId: string, dbInstance: typeof
 
     // Decrypt access token
     const accessToken = EncryptionService.decrypt(item.accessToken);
+
+    // Test account: data is pre-seeded in DB, no sync needed
+    if (isTestToken(accessToken)) return { added: 0, modified: 0, removed: 0 };
 
     // 2. Fetch all available accounts for the item
     const accountsResponse = await getPlaidClient().accountsGet({ access_token: accessToken });
@@ -552,6 +557,7 @@ export async function syncTransactions(accessToken: string, cursor?: string) {
  * @returns Recurring transaction streams
  */
 export async function getRecurringTransactions(accessToken: string) {
+  if (isTestToken(accessToken)) return getTestRecurringTransactions();
   try {
     const request: TransactionsRecurringGetRequest = {
       access_token: accessToken,
@@ -596,6 +602,7 @@ export async function getAuth(accessToken: string) {
  * @returns Investment holdings and securities, or null if not supported by institution
  */
 export async function getInvestmentHoldings(accessToken: string) {
+  if (isTestToken(accessToken)) return getTestInvestmentHoldings();
   try {
     const request: InvestmentsHoldingsGetRequest = {
       access_token: accessToken,
@@ -655,6 +662,7 @@ export async function getInvestmentTransactions(accessToken: string, startDate: 
  * @returns Liability details including payment schedules, or null if not supported
  */
 export async function getLiabilities(accessToken: string) {
+  if (isTestToken(accessToken)) return getTestLiabilities();
   try {
     const request: LiabilitiesGetRequest = {
       access_token: accessToken,

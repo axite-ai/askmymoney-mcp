@@ -46,6 +46,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:all": "pnpm test:run && pnpm test:e2e",
     "test:watch": "vitest watch",
+    "seed:test": "tsx scripts/seed-test-account.ts",
     "generate:tool": "tsx scripts/generate-tool.ts",
     "generate:widget": "tsx scripts/generate-widget.ts"
   },

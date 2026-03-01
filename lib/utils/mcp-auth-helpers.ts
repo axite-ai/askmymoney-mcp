@@ -15,9 +15,11 @@ import {
 } from "./auth-responses";
 import { auth } from "../auth";
 import { db } from "@/lib/db";
-import { passkey } from "@/lib/db/schema";
+import { passkey, user as userTable } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "@/lib/services/logger-service";
+
+const testAccountEmail = process.env.TEST_ACCOUNT_EMAIL || "test@askmymoney.ai";
 
 interface AuthRequirements {
   /** Require active subscription (default: true) */
@@ -74,8 +76,21 @@ export async function requireAuth(
     return createLoginPromptResponse(featureName);
   }
 
+  // Check if this is the test account (skip passkey for OpenAI review)
+  let isTestAccount = false;
+  try {
+    const userRecord = await db
+      .select({ email: userTable.email })
+      .from(userTable)
+      .where(eq(userTable.id, session.userId))
+      .limit(1);
+    isTestAccount = userRecord[0]?.email === testAccountEmail;
+  } catch {
+    // Fail closed — treat as non-test account
+  }
+
   // Check 2: Security (Passkey) enabled (if required)
-  if (requireSecurity) {
+  if (requireSecurity && !isTestAccount) {
     try {
       // Check Passkeys from database
       const passkeys = await db.select().from(passkey).where(eq(passkey.userId, session.userId)).limit(1);
