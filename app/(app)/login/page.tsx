@@ -7,7 +7,6 @@ import { signIn } from "@/lib/auth/client";
 function LoginContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const callbackUrl = searchParams.get("callbackURL") || "/";
   const [showTestLogin, setShowTestLogin] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -18,7 +17,7 @@ function LoginContent() {
     if (searchParams.has("client_id")) {
       return `/api/auth/mcp/authorize?${searchParams.toString()}`;
     }
-    return callbackUrl;
+    return searchParams.get("callbackURL") || "/";
   };
 
   const handleTestLogin = async (e: React.FormEvent) => {

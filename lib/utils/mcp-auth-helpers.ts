@@ -18,8 +18,9 @@ import { db } from "@/lib/db";
 import { passkey, user as userTable } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "@/lib/services/logger-service";
+import { TEST_ACCOUNT_EMAIL } from "@/lib/services/test-account-data";
 
-const testAccountEmail = process.env.TEST_ACCOUNT_EMAIL || "test@askmymoney.ai";
+const testAccountEmail = process.env.TEST_ACCOUNT_EMAIL || TEST_ACCOUNT_EMAIL;
 
 interface AuthRequirements {
   /** Require active subscription (default: true) */
@@ -76,40 +77,44 @@ export async function requireAuth(
     return createLoginPromptResponse(featureName);
   }
 
-  // Check if this is the test account (skip passkey for OpenAI review)
-  let isTestAccount = false;
-  try {
-    const userRecord = await db
-      .select({ email: userTable.email })
-      .from(userTable)
-      .where(eq(userTable.id, session.userId))
-      .limit(1);
-    isTestAccount = userRecord[0]?.email === testAccountEmail;
-  } catch {
-    // Fail closed — treat as non-test account
-  }
-
   // Check 2: Security (Passkey) enabled (if required)
-  if (requireSecurity && !isTestAccount) {
+  // Skip passkey check for the test account (OpenAI review)
+  if (requireSecurity) {
+    let isTestAccount = false;
     try {
-      // Check Passkeys from database
-      const passkeys = await db.select().from(passkey).where(eq(passkey.userId, session.userId)).limit(1);
-      const hasPasskey = passkeys.length > 0;
+      const userRecord = await db
+        .select({ email: userTable.email })
+        .from(userTable)
+        .where(eq(userTable.id, session.userId))
+        .limit(1);
+      isTestAccount = userRecord[0]?.email === testAccountEmail;
+    } catch {
+      // Fail closed — treat as non-test account
+    }
 
-      console.log(`[requireAuth] Security check:`, {
-        required: true,
-        hasPasskey,
-        userId: session.userId,
-      });
+    if (isTestAccount) {
+      console.log(`[requireAuth] Test account detected, skipping passkey check`);
+    } else {
+      try {
+        // Check Passkeys from database
+        const passkeys = await db.select().from(passkey).where(eq(passkey.userId, session.userId)).limit(1);
+        const hasPasskey = passkeys.length > 0;
 
-      if (!hasPasskey) {
-        console.log(`[requireAuth] Passkey not enabled, returning Security Required response`);
+        console.log(`[requireAuth] Security check:`, {
+          required: true,
+          hasPasskey,
+          userId: session.userId,
+        });
+
+        if (!hasPasskey) {
+          console.log(`[requireAuth] Passkey not enabled, returning Security Required response`);
+          return createSecurityRequiredResponse(featureName, session.userId, headers);
+        }
+      } catch (error) {
+        console.error(`[requireAuth] Error checking security status:`, error);
+        // Fail closed
         return createSecurityRequiredResponse(featureName, session.userId, headers);
       }
-    } catch (error) {
-      console.error(`[requireAuth] Error checking security status:`, error);
-      // Fail closed
-      return createSecurityRequiredResponse(featureName, session.userId, headers);
     }
   }
 

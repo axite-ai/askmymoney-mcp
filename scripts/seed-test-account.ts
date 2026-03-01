@@ -30,9 +30,10 @@ import {
   TEST_STATIC_TOKEN,
   TEST_ITEM_ID,
   TEST_ACCOUNT_IDS,
+  TEST_ACCOUNT_EMAIL,
 } from "@/lib/services/test-account-data";
 
-const TEST_EMAIL = process.env.TEST_ACCOUNT_EMAIL || "test@askmymoney.ai";
+const TEST_EMAIL = process.env.TEST_ACCOUNT_EMAIL || TEST_ACCOUNT_EMAIL;
 const TEST_USERNAME = "test_user";
 const TEST_PASSWORD = process.env.TEST_ACCOUNT_PASSWORD;
 const TEST_NAME = "Test User";

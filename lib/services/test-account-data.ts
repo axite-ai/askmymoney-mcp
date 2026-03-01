@@ -12,6 +12,7 @@ import type { AccountBase, CreditCardLiability } from "plaid";
 import { APRAprTypeEnum, AccountType, AccountSubtype } from "plaid";
 
 export const TEST_STATIC_TOKEN = "test-static-token";
+export const TEST_ACCOUNT_EMAIL = "test@askmymoney.ai";
 
 export function isTestToken(token: string): boolean {
   return token === TEST_STATIC_TOKEN;
@@ -30,76 +31,57 @@ export const TEST_ACCOUNT_IDS = {
 export const TEST_ITEM_ID = "test-item-001";
 
 // ---------------------------------------------------------------------------
+// Shared account objects (used by balances, investments, and liabilities)
+// ---------------------------------------------------------------------------
+const TEST_ACCOUNTS: Record<string, AccountBase> = {
+  checking: {
+    account_id: TEST_ACCOUNT_IDS.checking,
+    balances: { available: 3892.41, current: 4250.75, iso_currency_code: "USD", limit: null, unofficial_currency_code: null },
+    mask: "4521",
+    name: "Checking - Primary",
+    official_name: "Personal Checking Account",
+    type: AccountType.Depository,
+    subtype: AccountSubtype.Checking,
+    persistent_account_id: "persistent-checking-001",
+  },
+  savings: {
+    account_id: TEST_ACCOUNT_IDS.savings,
+    balances: { available: 12500.0, current: 12500.0, iso_currency_code: "USD", limit: null, unofficial_currency_code: null },
+    mask: "8834",
+    name: "Savings - Emergency Fund",
+    official_name: "High-Yield Savings",
+    type: AccountType.Depository,
+    subtype: AccountSubtype.Savings,
+    persistent_account_id: "persistent-savings-001",
+  },
+  credit: {
+    account_id: TEST_ACCOUNT_IDS.credit,
+    balances: { available: 8152.68, current: 1847.32, iso_currency_code: "USD", limit: 10000, unofficial_currency_code: null },
+    mask: "3019",
+    name: "Chase Sapphire Preferred",
+    official_name: "Sapphire Preferred Card",
+    type: AccountType.Credit,
+    subtype: AccountSubtype.CreditCard,
+    persistent_account_id: "persistent-credit-001",
+  },
+  investment: {
+    account_id: TEST_ACCOUNT_IDS.investment,
+    balances: { available: null, current: 45230.0, iso_currency_code: "USD", limit: null, unofficial_currency_code: null },
+    mask: "7762",
+    name: "Fidelity 401(k)",
+    official_name: "401(k) Retirement Account",
+    type: AccountType.Investment,
+    subtype: AccountSubtype._401k,
+    persistent_account_id: "persistent-invest-001",
+  },
+};
+
+// ---------------------------------------------------------------------------
 // getAccountBalances() — returns shape matching Plaid AccountsGetResponse.data
 // ---------------------------------------------------------------------------
 export function getTestAccountBalances(): { accounts: AccountBase[]; item: any; request_id: string } {
   return {
-    accounts: [
-      {
-        account_id: TEST_ACCOUNT_IDS.checking,
-        balances: {
-          available: 3892.41,
-          current: 4250.75,
-          iso_currency_code: "USD",
-          limit: null,
-          unofficial_currency_code: null,
-        },
-        mask: "4521",
-        name: "Checking - Primary",
-        official_name: "Personal Checking Account",
-        type: AccountType.Depository,
-        subtype: AccountSubtype.Checking,
-        persistent_account_id: "persistent-checking-001",
-      },
-      {
-        account_id: TEST_ACCOUNT_IDS.savings,
-        balances: {
-          available: 12500.0,
-          current: 12500.0,
-          iso_currency_code: "USD",
-          limit: null,
-          unofficial_currency_code: null,
-        },
-        mask: "8834",
-        name: "Savings - Emergency Fund",
-        official_name: "High-Yield Savings",
-        type: AccountType.Depository,
-        subtype: AccountSubtype.Savings,
-        persistent_account_id: "persistent-savings-001",
-      },
-      {
-        account_id: TEST_ACCOUNT_IDS.credit,
-        balances: {
-          available: 8152.68,
-          current: 1847.32,
-          iso_currency_code: "USD",
-          limit: 10000,
-          unofficial_currency_code: null,
-        },
-        mask: "3019",
-        name: "Chase Sapphire Preferred",
-        official_name: "Sapphire Preferred Card",
-        type: AccountType.Credit,
-        subtype: AccountSubtype.CreditCard,
-        persistent_account_id: "persistent-credit-001",
-      },
-      {
-        account_id: TEST_ACCOUNT_IDS.investment,
-        balances: {
-          available: null,
-          current: 45230.0,
-          iso_currency_code: "USD",
-          limit: null,
-          unofficial_currency_code: null,
-        },
-        mask: "7762",
-        name: "Fidelity 401(k)",
-        official_name: "401(k) Retirement Account",
-        type: AccountType.Investment,
-        subtype: AccountSubtype._401k,
-        persistent_account_id: "persistent-invest-001",
-      },
-    ],
+    accounts: Object.values(TEST_ACCOUNTS),
     item: {
       item_id: TEST_ITEM_ID,
       institution_id: "ins_test_demo",
@@ -173,7 +155,7 @@ export function getTestInvestmentHoldings() {
   ];
 
   return {
-    accounts: [getTestAccountBalances().accounts[3]], // 401k account
+    accounts: [TEST_ACCOUNTS.investment],
     holdings: [
       {
         account_id: TEST_ACCOUNT_IDS.investment,
@@ -229,7 +211,7 @@ export function getTestInvestmentHoldings() {
 // ---------------------------------------------------------------------------
 export function getTestLiabilities(): { accounts: AccountBase[]; liabilities: { credit: CreditCardLiability[]; mortgage: null; student: null } } {
   return {
-    accounts: [getTestAccountBalances().accounts[2]], // credit card account
+    accounts: [TEST_ACCOUNTS.credit],
     liabilities: {
       credit: [
         {
